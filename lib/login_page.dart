@@ -26,11 +26,47 @@ class _LoginPageState extends State<LoginPage> {
         password: _pass.text.trim(),
       );
     } on FirebaseAuthException catch (e) {
-      setState(() => _error = e.message ?? e.code);
-    } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() {
+        _error = e.message ?? 'Error de autenticación';
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Ocurrió un error inesperado';
+      });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _register() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _email.text.trim(),
+        password: _pass.text.trim(),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _error = e.message ?? 'Error de registro';
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Ocurrió un error inesperado';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -44,42 +80,70 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Iniciar sesión')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Gestiona',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Correo',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _pass,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Contraseña',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _loading ? null : _register,
+                        child: const Text('Crear cuenta'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _loading ? null : _login,
+                        child: _loading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Entrar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pass,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Contraseña'),
-            ),
-            const SizedBox(height: 16),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_error!, style: const TextStyle(color: Colors.red)),
-              ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _login,
-                child: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Entrar'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
