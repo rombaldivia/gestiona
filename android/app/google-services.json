@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "823032566348",
+    "project_id": "erp-app-ade8e",
+    "storage_bucket": "erp-app-ade8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:823032566348:android:82a3e26aa5d213265b9ae9",
+        "android_client_info": {
+          "package_name": "com.example.erp_flutter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "823032566348-5a11p76s2pns1b48anhkf58qchq9mobm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.erp_flutter",
+            "certificate_hash": "1378e8398ad2380d5eb38e3454e7319fe9f1d89a"
+          }
+        },
+        {
+          "client_id": "823032566348-idetgqmr8enos4s6vfi35b6per5frsoa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHw-1eGFj8V3riG9K_VB_tPqlgOhb6Ay0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "823032566348-idetgqmr8enos4s6vfi35b6per5frsoa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "823032566348-vkjmhccpb8f3cdjmgc6b4qbidfje7oc4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.erpFlutterClean"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:823032566348:android:6e1da414118dd0385b9ae9",
+        "android_client_info": {
+          "package_name": "com.romel.gestiona"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "823032566348-04u9r1ft59l1diqk7dsbdlkc54l082em.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.romel.gestiona",
+            "certificate_hash": "1378e8398ad2380d5eb38e3454e7319fe9f1d89a"
+          }
+        },
+        {
+          "client_id": "823032566348-idetgqmr8enos4s6vfi35b6per5frsoa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHw-1eGFj8V3riG9K_VB_tPqlgOhb6Ay0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "823032566348-idetgqmr8enos4s6vfi35b6per5frsoa.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "823032566348-vkjmhccpb8f3cdjmgc6b4qbidfje7oc4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.erpFlutterClean"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
