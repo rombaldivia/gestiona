@@ -3,8 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'features/auth/data/auth_service.dart';
 import 'features/auth/ui/login_page.dart';
-import 'features/company/data/company_service.dart';
-import 'features/company/ui/company_gate.dart';
+
+import 'features/subscription/presentation/entitlements_gate.dart';
+import 'features/company/presentation/company_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,10 +19,9 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = AuthService();
-    final companyService = CompanyService();
 
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2F6DAE),
+      seedColor: const Color(0xFF2F6DAE), // azul calmado
       brightness: Brightness.light,
     );
 
@@ -42,18 +42,12 @@ class App extends StatelessWidget {
           color: Colors.white,
           elevation: 0.8,
           shadowColor: Colors.black12,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          margin: const EdgeInsets.all(0),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 14,
-          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFD7E1EE)),
@@ -70,9 +64,7 @@ class App extends StatelessWidget {
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             textStyle: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
@@ -88,15 +80,14 @@ class App extends StatelessWidget {
           color: Color(0xFFE6EEF7),
         ),
       ),
-      home: AuthGate(auth: auth, companyService: companyService),
+      home: AuthGate(auth: auth),
     );
   }
 }
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key, required this.auth, required this.companyService});
+  const AuthGate({super.key, required this.auth});
   final AuthService auth;
-  final CompanyService companyService;
 
   @override
   Widget build(BuildContext context) {
@@ -104,13 +95,19 @@ class AuthGate extends StatelessWidget {
       stream: auth.authStateChanges(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
+
         final user = snap.data;
         if (user == null) return LoginPage(auth: auth);
-        return CompanyGate(auth: auth, companyService: companyService);
+
+        return EntitlementsGate(
+          user: user,
+          child: CompanyGate(
+            auth: auth,
+            user: user,
+          ),
+        );
       },
     );
   }
