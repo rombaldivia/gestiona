@@ -20,4 +20,9 @@ jobs:
       - run: flutter --version
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
+      - run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo "No tests yet (test/ directory not found). Skipping."
+          fi
