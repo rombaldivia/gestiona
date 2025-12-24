@@ -9,7 +9,6 @@ class CompanyService {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
 
-  /// Devuelve el companyId si el usuario tiene al menos 1 membership; si no, null.
   Stream<String?> firstCompanyIdStream() {
     final user = _auth.currentUser;
     if (user == null) return const Stream<String?>.empty();
@@ -27,7 +26,6 @@ class CompanyService {
         });
   }
 
-  /// Crea una empresa y el membership del usuario (uid_companyId) en un batch.
   Future<String> createCompanyAndMembership({
     required String companyName,
   }) async {
@@ -36,7 +34,7 @@ class CompanyService {
       throw StateError('No hay usuario logueado.');
     }
 
-    final companyRef = _db.collection('companies').doc(); // auto-id
+    final companyRef = _db.collection('companies').doc();
     final companyId = companyRef.id;
 
     final memberId = '${user.uid}_$companyId';

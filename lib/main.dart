@@ -21,7 +21,7 @@ class App extends StatelessWidget {
     final companyService = CompanyService();
 
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2F6DAE), // azul calmado
+      seedColor: const Color(0xFF2F6DAE),
       brightness: Brightness.light,
     );
 
