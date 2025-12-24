@@ -77,7 +77,6 @@ class _CreateCompanyPageState extends State<CreateCompanyPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-
                         TextFormField(
                           controller: _name,
                           decoration: const InputDecoration(
@@ -86,19 +85,23 @@ class _CreateCompanyPageState extends State<CreateCompanyPage> {
                           ),
                           validator: (v) {
                             final s = (v ?? '').trim();
-                            if (s.isEmpty) return 'Escribe un nombre';
-                            if (s.length < 3) return 'Muy corto';
+                            if (s.isEmpty) {
+                              return 'Escribe un nombre';
+                            }
+                            if (s.length < 3) {
+                              return 'Muy corto';
+                            }
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 14),
                         FilledButton(
                           onPressed: _loading
                               ? null
                               : () async {
-                                  if (!_formKey.currentState!.validate())
+                                  if (!_formKey.currentState!.validate()) {
                                     return;
+                                  }
 
                                   setState(() => _loading = true);
                                   try {
@@ -113,15 +116,15 @@ class _CreateCompanyPageState extends State<CreateCompanyPage> {
                                         content: Text('Empresa creada ✅'),
                                       ),
                                     );
-                                    // No navegamos: CompanyGate detectará membership y entrará solo.
                                   } catch (e) {
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text(e.toString())),
                                     );
                                   } finally {
-                                    if (mounted)
+                                    if (mounted) {
                                       setState(() => _loading = false);
+                                    }
                                   }
                                 },
                           child: _loading

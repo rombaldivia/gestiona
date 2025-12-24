@@ -96,9 +96,9 @@ class _LoginPageState extends State<LoginPage> {
                         child: FilledButton.tonalIcon(
                           onPressed: _loading
                               ? null
-                              : () => _run(
-                                  () async => widget.auth.signInWithGoogle(),
-                                ),
+                              : () => _run(() async {
+                                  await widget.auth.signInWithGoogle();
+                                }),
                           icon: const Icon(Icons.g_mobiledata),
                           label: const Text('Continuar con Google'),
                         ),
@@ -139,8 +139,10 @@ class _LoginPageState extends State<LoginPage> {
                                 onPressed: _loading
                                     ? null
                                     : () => _run(() async {
-                                        if (!_formKey.currentState!.validate())
+                                        if (!_formKey.currentState!
+                                            .validate()) {
                                           return;
+                                        }
                                         await widget.auth.signInWithEmail(
                                           email: _email.text.trim(),
                                           password: _pass.text.trim(),
