@@ -23,11 +23,13 @@ class _LoginPageState extends State<LoginPage> {
       await action();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -61,7 +63,7 @@ class _LoginPageState extends State<LoginPage> {
                             height: 44,
                             width: 44,
                             decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.12),
+                              color: cs.primary.withAlpha((0.12 * 255).round()),
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(Icons.business, color: cs.primary),
@@ -73,7 +75,10 @@ class _LoginPageState extends State<LoginPage> {
                               children: [
                                 Text(
                                   'Gestiona',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 SizedBox(height: 2),
                                 Text(
@@ -86,24 +91,21 @@ class _LoginPageState extends State<LoginPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.tonalIcon(
                           onPressed: _loading
                               ? null
-                              : () => _run(() async {
-                                    await widget.auth.signInWithGoogle();
-                                  }),
+                              : () => _run(
+                                  () async => widget.auth.signInWithGoogle(),
+                                ),
                           icon: const Icon(Icons.g_mobiledata),
                           label: const Text('Continuar con Google'),
                         ),
                       ),
-
                       const SizedBox(height: 10),
                       const Divider(),
                       const SizedBox(height: 10),
-
                       Form(
                         key: _formKey,
                         child: Column(
@@ -115,7 +117,9 @@ class _LoginPageState extends State<LoginPage> {
                                 labelText: 'Correo',
                                 hintText: 'tucorreo@ejemplo.com',
                               ),
-                              validator: (v) => (v == null || !v.contains('@')) ? 'Correo inválido' : null,
+                              validator: (v) => (v == null || !v.contains('@'))
+                                  ? 'Correo inválido'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
@@ -124,22 +128,24 @@ class _LoginPageState extends State<LoginPage> {
                               decoration: const InputDecoration(
                                 labelText: 'Contraseña',
                               ),
-                              validator: (v) => (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                              validator: (v) => (v == null || v.length < 6)
+                                  ? 'Mínimo 6 caracteres'
+                                  : null,
                             ),
                             const SizedBox(height: 14),
-
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton(
                                 onPressed: _loading
                                     ? null
                                     : () => _run(() async {
-                                          if (!_formKey.currentState!.validate()) return;
-                                          await widget.auth.signInWithEmail(
-                                            email: _email.text.trim(),
-                                            password: _pass.text.trim(),
-                                          );
-                                        }),
+                                        if (!_formKey.currentState!.validate())
+                                          return;
+                                        await widget.auth.signInWithEmail(
+                                          email: _email.text.trim(),
+                                          password: _pass.text.trim(),
+                                        );
+                                      }),
                                 child: _loading
                                     ? const SizedBox(
                                         height: 18,
@@ -152,7 +158,6 @@ class _LoginPageState extends State<LoginPage> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -160,23 +165,30 @@ class _LoginPageState extends State<LoginPage> {
                           TextButton(
                             onPressed: _loading
                                 ? null
-                                : () => Navigator.push(
+                                : () {
+                                    Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ForgotPasswordPage(auth: widget.auth),
+                                        builder: (_) => ForgotPasswordPage(
+                                          auth: widget.auth,
+                                        ),
                                       ),
-                                    ),
+                                    );
+                                  },
                             child: const Text('Recuperar contraseña'),
                           ),
                           TextButton(
                             onPressed: _loading
                                 ? null
-                                : () => Navigator.push(
+                                : () {
+                                    Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => RegisterPage(auth: widget.auth),
+                                        builder: (_) =>
+                                            RegisterPage(auth: widget.auth),
                                       ),
-                                    ),
+                                    );
+                                  },
                             child: const Text('Crear cuenta'),
                           ),
                         ],

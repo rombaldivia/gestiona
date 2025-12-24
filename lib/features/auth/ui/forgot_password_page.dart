@@ -30,7 +30,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Correo', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Correo'),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -41,15 +41,24 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     : () async {
                         setState(() => _loading = true);
                         try {
-                          await widget.auth.sendPasswordResetEmail(_email.text.trim());
-                          if (!mounted) return;
+                          await widget.auth.sendPasswordResetEmail(
+                            _email.text.trim(),
+                          );
+                          if (!context.mounted) return;
+
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Correo enviado para restablecer contraseña.')),
+                            const SnackBar(
+                              content: Text(
+                                'Correo enviado para restablecer contraseña.',
+                              ),
+                            ),
                           );
                           Navigator.pop(context);
                         } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(e.toString())));
                         } finally {
                           if (mounted) setState(() => _loading = false);
                         }

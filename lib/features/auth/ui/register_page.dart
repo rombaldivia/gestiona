@@ -35,15 +35,17 @@ class _RegisterPageState extends State<RegisterPage> {
               TextFormField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Correo', border: OutlineInputBorder()),
-                validator: (v) => (v == null || !v.contains('@')) ? 'Correo inválido' : null,
+                decoration: const InputDecoration(labelText: 'Correo'),
+                validator: (v) =>
+                    (v == null || !v.contains('@')) ? 'Correo inválido' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _pass,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Contraseña', border: OutlineInputBorder()),
-                validator: (v) => (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                decoration: const InputDecoration(labelText: 'Contraseña'),
+                validator: (v) =>
+                    (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -53,17 +55,20 @@ class _RegisterPageState extends State<RegisterPage> {
                       ? null
                       : () async {
                           if (!_formKey.currentState!.validate()) return;
+
                           setState(() => _loading = true);
                           try {
                             await widget.auth.registerWithEmail(
                               email: _email.text.trim(),
                               password: _pass.text.trim(),
                             );
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             Navigator.pop(context);
                           } catch (e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
                           } finally {
                             if (mounted) setState(() => _loading = false);
                           }
