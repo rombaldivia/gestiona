@@ -13,29 +13,13 @@ class EditCompanyNamePage extends StatefulWidget {
 }
 
 class _EditCompanyNamePageState extends State<EditCompanyNamePage> {
-  late final TextEditingController _ctrl;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: widget.initialName);
-  }
+  late final TextEditingController _ctrl = TextEditingController(text: widget.initialName);
+  bool _busy = false;
 
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _save() async {
-    final name = _ctrl.text.trim();
-    if (name.isEmpty) return;
-
-    setState(() => _saving = true);
-    // devolvemos el nombre nuevo; quien llama decide cómo persistir/sync
-    if (!mounted) return;
-    Navigator.of(context).pop(name);
   }
 
   @override
@@ -48,19 +32,21 @@ class _EditCompanyNamePageState extends State<EditCompanyNamePage> {
           children: [
             TextField(
               controller: _ctrl,
-              decoration: const InputDecoration(
-                labelText: 'Nombre de la empresa',
-              ),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
+              decoration: const InputDecoration(labelText: 'Nombre'),
             ),
-            const Spacer(),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: const Icon(Icons.save),
-                label: const Text('Guardar'),
+              child: FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () {
+                        final v = _ctrl.text.trim();
+                        if (v.isEmpty) return;
+                        setState(() => _busy = true);
+                        Navigator.of(context).pop(v);
+                      },
+                child: const Text('Guardar'),
               ),
             ),
           ],

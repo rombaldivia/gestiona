@@ -2,11 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../auth/data/auth_service.dart';
+import '../../home/ui/home_page.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 import '../data/company_offline_first_service.dart';
-import '../presentation/company_scope.dart';
 import '../ui/create_company_page.dart';
-import '../../home/ui/home_page.dart';
+import '../ui/edit_company_name_page.dart';
+import 'company_scope.dart';
 
 class CompanyGate extends StatefulWidget {
   const CompanyGate({
@@ -23,97 +24,70 @@ class CompanyGate extends StatefulWidget {
 }
 
 class _CompanyGateState extends State<CompanyGate> {
-  late final CompanyOfflineFirstService _service;
-
-  String? _companyId;
-  String? _companyName;
+  final _service = CompanyOfflineFirstService();
+  final _model = CompanyModel();
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _service = CompanyOfflineFirstService();
-    _loadActiveFromLocal();
+    _bootstrap();
   }
 
-  Future<void> _loadActiveFromLocal() async {
-    final active = await _service.getActiveLocalCompany();
-    if (!mounted) return;
-
-    setState(() {
-      _companyId = active?.$1;
-      _companyName = active?.$2;
-      _loading = false;
-    });
+  Future<void> _bootstrap() async {
+    final active = await _service.getActiveLocalCompany(uid: widget.user.uid);
+    if (active != null) {
+      _model.setActive(companyId: active.$1, companyName: active.$2);
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _ensureCompany() async {
-    // Abre pantalla crear empresa. Al volver, recarga local.
-    await Navigator.of(context).push(
+  Future<void> _createCompany(String name) async {
+    final ent = EntitlementsScope.of(context);
+    final companyId = await _service.createCompanyOfflineFirst(companyName: name, ent: ent);
+    _model.setActive(companyId: companyId, companyName: name);
+  }
+
+  Future<void> _sync() async {
+    final ent = EntitlementsScope.of(context);
+    await _service.syncActiveCompany(ent: ent);
+  }
+
+  Future<void> _editCompanyName() async {
+    final ent = EntitlementsScope.of(context);
+
+    final newName = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => CreateCompanyPage(service: _service),
+        builder: (_) => EditCompanyNamePage(initialName: _model.companyName),
       ),
     );
-    await _loadActiveFromLocal();
+
+    if (newName == null) return;
+
+    // local-first + cloud si Plus/Pro
+    await _service.renameActiveCompany(newName: newName, ent: ent);
+
+    // 🔥 actualiza UI en tiempo real (sin reiniciar)
+    _model.setActive(companyId: _model.companyId, companyName: newName);
   }
 
   @override
   Widget build(BuildContext context) {
-    final ent = EntitlementsScope.of(context);
-
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_companyId == null || _companyName == null) {
-      // No hay empresa guardada -> crear
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.apartment, size: 56),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Bienvenido 👋',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text('Crea tu primera empresa para empezar.'),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _ensureCompany,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Crear empresa'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+    if (!_model.hasCompany) {
+      return CreateCompanyPage(onCreate: _createCompany);
     }
 
     return CompanyScope(
-      companyId: _companyId!,
-      companyName: _companyName!,
+      notifier: _model,
       child: HomePage(
         auth: widget.auth,
         user: widget.user,
-        onSyncPressed: () async {
-          // Sync del active local -> nube, solo Plus/Pro
-          // (el botón en UI ya está disabled si no cloudSync)
-          await _service.syncActiveCompany(ent: ent);
-        },
+        onSyncPressed: _sync,
+        onEditCompanyName: _editCompanyName,
       ),
     );
   }

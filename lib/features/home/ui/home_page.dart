@@ -2,76 +2,25 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../auth/data/auth_service.dart';
-import '../../company/data/company_offline_first_service.dart';
 import '../../company/presentation/company_scope.dart';
-import '../../company/ui/edit_company_name_page.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
     required this.auth,
     required this.user,
     required this.onSyncPressed,
+    required this.onEditCompanyName,
   });
 
   final AuthService auth;
   final User user;
   final Future<void> Function() onSyncPressed;
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  String? _companyId;
-  String? _companyName;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final company = CompanyScope.of(context);
-    _companyId ??= company.companyId;
-    _companyName ??= company.companyName;
-  }
+  final Future<void> Function() onEditCompanyName;
 
   Future<void> _signOut() async {
-    await widget.auth.signOut();
-  }
-
-  Future<void> _editCompanyName() async {
-    final currentName = _companyName ?? CompanyScope.of(context).companyName;
-
-    final newName = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => EditCompanyNamePage(initialName: currentName),
-      ),
-    );
-
-    if (newName == null) return;
-    if (!mounted) return;
-
-    final ent = EntitlementsScope.of(context);
-
-    try {
-      final svc = CompanyOfflineFirstService();
-      await svc.renameActiveCompanyOfflineFirst(newName: newName, ent: ent);
-
-      if (!mounted) return;
-
-      setState(() {
-        _companyName = newName;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nombre actualizado ✅')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar: $e')),
-      );
-    }
+    await auth.signOut();
   }
 
   @override
@@ -79,17 +28,11 @@ class _HomePageState extends State<HomePage> {
     final ent = EntitlementsScope.of(context);
     final company = CompanyScope.of(context);
 
-    final companyId = _companyId ?? company.companyId;
-    final companyName = _companyName ?? company.companyName;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gestiona'),
         actions: [
-          IconButton(
-            onPressed: _signOut,
-            icon: const Icon(Icons.logout),
-          ),
+          IconButton(onPressed: _signOut, icon: const Icon(Icons.logout)),
         ],
       ),
       body: ListView(
@@ -108,9 +51,9 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         const Text('Empresa activa', style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
-                        Text(companyName),
+                        Text(company.companyName),
                         const SizedBox(height: 6),
-                        Text('ID: $companyId', style: Theme.of(context).textTheme.bodySmall),
+                        Text('ID: ${company.companyId}', style: Theme.of(context).textTheme.bodySmall),
                       ],
                     ),
                   ),
@@ -120,8 +63,8 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(height: 8),
                       IconButton(
                         tooltip: 'Editar nombre',
+                        onPressed: onEditCompanyName,
                         icon: const Icon(Icons.edit),
-                        onPressed: _editCompanyName,
                       ),
                     ],
                   ),
@@ -130,6 +73,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
+
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -146,6 +90,7 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
@@ -155,13 +100,11 @@ class _HomePageState extends State<HomePage> {
                                 const SnackBar(content: Text('Sincronizando...')),
                               );
                               try {
-                                await widget.onSyncPressed();
-                                if (!mounted) return;
+                                await onSyncPressed();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Sync OK ✅')),
                                 );
                               } catch (e) {
-                                if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('Sync falló: $e')),
                                 );

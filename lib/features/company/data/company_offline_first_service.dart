@@ -17,14 +17,12 @@ class CompanyOfflineFirstService {
   final FirebaseFirestore _db;
   final CompanyLocalStore _local;
 
-  /// Helper: devuelve la empresa activa guardada en LOCAL para el usuario actual
-  Future<(String, String)?> getActiveLocalCompany() async {
-    final user = _auth.currentUser;
-    if (user == null) return null;
-    return _local.getActiveCompany(uid: user.uid);
+  /// Lee empresa activa desde local (para que CompanyGate arranque bien)
+  Future<(String, String)?> getActiveLocalCompany({required String uid}) {
+    return _local.getActiveCompany(uid: uid);
   }
 
-  /// 1) guarda local SIEMPRE
+  /// 1) guarda local SIEMPRE (persistencia inmediata)
   /// 2) si ent.cloudSync (Plus/Pro) intenta mandar a Firestore
   Future<String> createCompanyOfflineFirst({
     required String companyName,
@@ -32,13 +30,12 @@ class CompanyOfflineFirstService {
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw StateError('No hay usuario autenticado.');
-
     final uid = user.uid;
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final companyId = 'c_$now';
 
-    // ✅ 1) LOCAL primero (persistencia inmediata)
+    // ✅ 1) LOCAL primero
     await _local.setActiveCompany(uid: uid, id: companyId, name: companyName);
     await _local.addPendingCompany(uid: uid, id: companyId, name: companyName, createdAtMs: now);
 
@@ -51,54 +48,44 @@ class CompanyOfflineFirstService {
           companyId: companyId,
           companyName: companyName,
         );
-        // removePendingCompany requiere 2 posicionales
-        await _local.removePendingCompany(uid, companyId);
+        await _local.removePendingCompany(uid, companyId); // <- 2 args
       } catch (_) {
-        // se queda pendiente en local
+        // queda pendiente en local
       }
     }
 
     return companyId;
   }
 
-  /// ✅ Renombra empresa activa: LOCAL primero y luego nube si Plus/Pro
-  Future<void> renameActiveCompanyOfflineFirst({
+  /// Renombrar empresa activa (local primero; nube si Plus/Pro)
+  Future<void> renameActiveCompany({
     required String newName,
     required Entitlements ent,
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw StateError('No hay usuario autenticado.');
-
     final uid = user.uid;
 
     final active = await _local.getActiveCompany(uid: uid);
     if (active == null) throw StateError('No hay empresa activa en local.');
 
     final companyId = active.$1;
+    final now = DateTime.now().millisecondsSinceEpoch;
 
-    // ✅ 1) LOCAL primero (instantáneo)
     await _local.setActiveCompany(uid: uid, id: companyId, name: newName);
+    await _local.addPendingCompany(uid: uid, id: companyId, name: newName, createdAtMs: now);
 
-    // ✅ 2) NUBE después (solo Plus/Pro)
     if (ent.cloudSync) {
       try {
-        final nowServer = FieldValue.serverTimestamp();
-
-        await _db.collection('companies').doc(companyId).set({
-          'name': newName,
-          'updatedAt': nowServer,
-        }, SetOptions(merge: true));
-
-        await _db.collection('users').doc(uid).set({
-          'uid': uid,
-          if (user.email != null) 'email': user.email,
-          'activeCompanyId': companyId,
-          'activeCompanyName': newName,
-          'updatedAt': nowServer,
-          'lastSyncAt': nowServer,
-        }, SetOptions(merge: true));
+        await _syncCompanyToCloud(
+          uid: uid,
+          email: user.email,
+          companyId: companyId,
+          companyName: newName,
+        );
+        await _local.removePendingCompany(uid, companyId);
       } catch (_) {
-        // si falla, igual queda renombrado en local (offline-first)
+        // queda pendiente para sync manual
       }
     }
   }
@@ -109,7 +96,6 @@ class CompanyOfflineFirstService {
 
     final user = _auth.currentUser;
     if (user == null) return false;
-
     final uid = user.uid;
 
     final active = await _local.getActiveCompany(uid: uid);
