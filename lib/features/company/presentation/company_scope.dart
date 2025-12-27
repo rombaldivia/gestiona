@@ -1,37 +1,25 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-class CompanyModel extends ChangeNotifier {
-  String? _companyId;
-  String? _companyName;
-
-  bool get hasCompany => _companyId != null && _companyName != null;
-
-  String get companyId => _companyId ?? '-';
-  String get companyName => _companyName ?? 'Sin empresa';
-
-  void setActive({required String companyId, required String companyName}) {
-    _companyId = companyId;
-    _companyName = companyName;
-    notifyListeners();
-  }
-
-  void clear() {
-    _companyId = null;
-    _companyName = null;
-    notifyListeners();
-  }
-}
-
-class CompanyScope extends InheritedNotifier<CompanyModel> {
+class CompanyScope extends InheritedWidget {
   const CompanyScope({
     super.key,
-    required CompanyModel notifier,
-    required Widget child,
-  }) : super(notifier: notifier, child: child);
+    required this.companyId,
+    required this.companyName,
+    required super.child,
+  });
 
-  static CompanyModel of(BuildContext context) {
+  final String companyId;
+  final String companyName;
+
+  static CompanyScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<CompanyScope>();
-    assert(scope != null, 'CompanyScope no encontrado en el árbol de widgets.');
-    return scope!.notifier!;
+    assert(scope != null, 'CompanyScope no está arriba en el árbol.');
+    return scope!;
+  }
+
+  @override
+  bool updateShouldNotify(covariant CompanyScope oldWidget) {
+    return companyId != oldWidget.companyId ||
+        companyName != oldWidget.companyName;
   }
 }

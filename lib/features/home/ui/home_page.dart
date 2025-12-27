@@ -63,21 +63,12 @@ class HomePage extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Column(
-                    children: [
-                      Chip(label: Text(ent.cloudSync ? 'Sync' : 'Local')),
-                      const SizedBox(height: 8),
-                      IconButton(
-                        tooltip: 'Editar nombre',
-                        onPressed: onEditCompanyName,
-                        icon: const Icon(Icons.edit),
-                      ),
-                    ],
-                  ),
+                  Chip(label: Text(ent.cloudSync ? 'Sync' : 'Local')),
                 ],
               ),
             ),
           ),
+
           const SizedBox(height: 12),
 
           Card(
@@ -102,25 +93,42 @@ class HomePage extends StatelessWidget {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 12),
 
+                  // ✅ BOTÓN EDITAR NOMBRE
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: onEditCompanyName,
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Editar nombre de empresa'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ✅ BOTÓN SYNC REAL (sin usar context después del await)
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
                       onPressed: ent.cloudSync
                           ? () async {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              final messenger = ScaffoldMessenger.of(context);
+
+                              messenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Sincronizando...'),
                                 ),
                               );
+
                               try {
                                 await onSyncPressed();
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   const SnackBar(content: Text('Sync OK ✅')),
                                 );
                               } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(content: Text('Sync falló: $e')),
                                 );
                               }
