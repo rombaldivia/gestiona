@@ -14,7 +14,8 @@ class EntitlementsScope extends InheritedWidget {
 
   /// Devuelve null si no hay EntitlementsScope arriba (NO crashea).
   static Entitlements? maybeOf(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<EntitlementsScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<EntitlementsScope>();
     return scope?.entitlements;
   }
 

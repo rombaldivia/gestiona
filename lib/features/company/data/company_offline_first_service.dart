@@ -9,9 +9,9 @@ class CompanyOfflineFirstService {
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
     CompanyLocalStore? local,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _db = firestore ?? FirebaseFirestore.instance,
-        _local = local ?? CompanyLocalStore();
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _db = firestore ?? FirebaseFirestore.instance,
+       _local = local ?? CompanyLocalStore();
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
@@ -37,7 +37,12 @@ class CompanyOfflineFirstService {
 
     // ✅ 1) LOCAL primero
     await _local.setActiveCompany(uid: uid, id: companyId, name: companyName);
-    await _local.addPendingCompany(uid: uid, id: companyId, name: companyName, createdAtMs: now);
+    await _local.addPendingCompany(
+      uid: uid,
+      id: companyId,
+      name: companyName,
+      createdAtMs: now,
+    );
 
     // ✅ 2) NUBE después (solo Plus/Pro)
     if (ent.cloudSync) {
@@ -73,7 +78,12 @@ class CompanyOfflineFirstService {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await _local.setActiveCompany(uid: uid, id: companyId, name: newName);
-    await _local.addPendingCompany(uid: uid, id: companyId, name: newName, createdAtMs: now);
+    await _local.addPendingCompany(
+      uid: uid,
+      id: companyId,
+      name: newName,
+      createdAtMs: now,
+    );
 
     if (ent.cloudSync) {
       try {

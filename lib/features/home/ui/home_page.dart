@@ -49,11 +49,17 @@ class HomePage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Empresa activa', style: TextStyle(fontWeight: FontWeight.w700)),
+                        const Text(
+                          'Empresa activa',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                         const SizedBox(height: 4),
                         Text(company.companyName),
                         const SizedBox(height: 6),
-                        Text('ID: ${company.companyId}', style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          'ID: ${company.companyId}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ],
                     ),
                   ),
@@ -80,13 +86,20 @@ class HomePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Plan', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'Plan',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Chip(label: Text(ent.tier.asString.toUpperCase())),
                       const SizedBox(width: 8),
-                      Chip(label: Text(ent.cloudSync ? 'Nube activada' : 'Solo local')),
+                      Chip(
+                        label: Text(
+                          ent.cloudSync ? 'Nube activada' : 'Solo local',
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -97,7 +110,9 @@ class HomePage extends StatelessWidget {
                       onPressed: ent.cloudSync
                           ? () async {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Sincronizando...')),
+                                const SnackBar(
+                                  content: Text('Sincronizando...'),
+                                ),
                               );
                               try {
                                 await onSyncPressed();
@@ -112,7 +127,11 @@ class HomePage extends StatelessWidget {
                             }
                           : null,
                       icon: const Icon(Icons.cloud_sync),
-                      label: Text(ent.cloudSync ? 'Sync ahora' : 'Sync (requiere Plus/Pro)'),
+                      label: Text(
+                        ent.cloudSync
+                            ? 'Sync ahora'
+                            : 'Sync (requiere Plus/Pro)',
+                      ),
                     ),
                   ),
                 ],

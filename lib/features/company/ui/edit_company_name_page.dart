@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 class EditCompanyNamePage extends StatefulWidget {
-  const EditCompanyNamePage({
-    super.key,
-    required this.initialName,
-  });
+  const EditCompanyNamePage({super.key, required this.initialName});
 
   final String initialName;
 
@@ -13,7 +10,9 @@ class EditCompanyNamePage extends StatefulWidget {
 }
 
 class _EditCompanyNamePageState extends State<EditCompanyNamePage> {
-  late final TextEditingController _ctrl = TextEditingController(text: widget.initialName);
+  late final TextEditingController _ctrl = TextEditingController(
+    text: widget.initialName,
+  );
   bool _busy = false;
 
   @override

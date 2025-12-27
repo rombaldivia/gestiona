@@ -40,7 +40,9 @@ class CompanyLocalStore {
   }) async {
     final sp = await SharedPreferences.getInstance();
     final raw = sp.getString(_kPendingList(uid));
-    final list = raw == null ? <Map<String, dynamic>>[] : (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    final list = raw == null
+        ? <Map<String, dynamic>>[]
+        : (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
 
     // evita duplicados por id
     final exists = list.any((e) => e['id'] == id);
@@ -60,7 +62,9 @@ class CompanyLocalStore {
     await sp.setString(_kPendingList(uid), jsonEncode(list));
   }
 
-  Future<List<(String, String)>> listPendingCompanies({required String uid}) async {
+  Future<List<(String, String)>> listPendingCompanies({
+    required String uid,
+  }) async {
     final sp = await SharedPreferences.getInstance();
     final raw = sp.getString(_kPendingList(uid));
     if (raw == null) return [];

@@ -3,7 +3,7 @@ import '../domain/company_summary.dart';
 
 class CompanyRepository {
   CompanyRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+    : _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -12,13 +12,13 @@ class CompanyRepository {
 
     return ref.snapshots().map((snap) {
       return snap.docs.map((d) {
-        final data = d.data();
-        final name = (data['name'] as String?)?.trim();
-        return CompanySummary(
-          id: d.id,
-          name: (name == null || name.isEmpty) ? 'Empresa ${d.id}' : name,
-        );
-      }).toList()
+          final data = d.data();
+          final name = (data['name'] as String?)?.trim();
+          return CompanySummary(
+            id: d.id,
+            name: (name == null || name.isEmpty) ? 'Empresa ${d.id}' : name,
+          );
+        }).toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     });
   }

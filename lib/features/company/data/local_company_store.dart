@@ -11,7 +11,10 @@ class LocalCompanyStore {
     return (id, name);
   }
 
-  Future<void> saveActiveCompany({required String id, required String name}) async {
+  Future<void> saveActiveCompany({
+    required String id,
+    required String name,
+  }) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kActiveCompanyId, id);
     await sp.setString(_kActiveCompanyName, name);

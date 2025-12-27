@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 class CreateCompanyPage extends StatefulWidget {
-  const CreateCompanyPage({
-    super.key,
-    required this.onCreate,
-  });
+  const CreateCompanyPage({super.key, required this.onCreate});
 
   final Future<void> Function(String companyName) onCreate;
 

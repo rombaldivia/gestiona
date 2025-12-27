@@ -16,8 +16,8 @@ enum PlanTier {
   }
 
   String get asString => switch (this) {
-        PlanTier.free => 'free',
-        PlanTier.plus => 'plus',
-        PlanTier.pro => 'pro',
-      };
+    PlanTier.free => 'free',
+    PlanTier.plus => 'plus',
+    PlanTier.pro => 'pro',
+  };
 }

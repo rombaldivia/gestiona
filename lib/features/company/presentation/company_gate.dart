@@ -10,11 +10,7 @@ import '../ui/edit_company_name_page.dart';
 import 'company_scope.dart';
 
 class CompanyGate extends StatefulWidget {
-  const CompanyGate({
-    super.key,
-    required this.auth,
-    required this.user,
-  });
+  const CompanyGate({super.key, required this.auth, required this.user});
 
   final AuthService auth;
   final User user;
@@ -44,7 +40,10 @@ class _CompanyGateState extends State<CompanyGate> {
 
   Future<void> _createCompany(String name) async {
     final ent = EntitlementsScope.of(context);
-    final companyId = await _service.createCompanyOfflineFirst(companyName: name, ent: ent);
+    final companyId = await _service.createCompanyOfflineFirst(
+      companyName: name,
+      ent: ent,
+    );
     _model.setActive(companyId: companyId, companyName: name);
   }
 

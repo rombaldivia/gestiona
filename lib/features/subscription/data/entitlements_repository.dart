@@ -7,11 +7,9 @@ import '../domain/entitlements.dart';
 import '../domain/plan_tier.dart';
 
 class EntitlementsRepository {
-  EntitlementsRepository({
-    FirebaseAuth? auth,
-    FirebaseFirestore? db,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _db = db ?? FirebaseFirestore.instance;
+  EntitlementsRepository({FirebaseAuth? auth, FirebaseFirestore? db})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
@@ -29,23 +27,17 @@ class EntitlementsRepository {
 
     final docRef = _db.collection('users').doc(user.uid);
 
-    final docSub = docRef.snapshots().listen(
-      (snap) {
-        final data = snap.data();
-        docTier = PlanTier.fromString(data?['plan'] as String?);
-        emit();
-      },
-      onError: controller.addError,
-    );
+    final docSub = docRef.snapshots().listen((snap) {
+      final data = snap.data();
+      docTier = PlanTier.fromString(data?['plan'] as String?);
+      emit();
+    }, onError: controller.addError);
 
-    final tokenSub = _auth.idTokenChanges().listen(
-      (u) async {
-        if (u == null) return;
-        claimsTier = await _tierFromClaims(u);
-        emit();
-      },
-      onError: controller.addError,
-    );
+    final tokenSub = _auth.idTokenChanges().listen((u) async {
+      if (u == null) return;
+      claimsTier = await _tierFromClaims(u);
+      emit();
+    }, onError: controller.addError);
 
     controller.onCancel = () async {
       await docSub.cancel();
