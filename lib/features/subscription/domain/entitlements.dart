@@ -17,14 +17,14 @@ class Entitlements {
 
   // Límites
   int get maxCompanies => switch (tier) {
-        PlanTier.free => 1,
-        PlanTier.plus => 3,
-        PlanTier.pro => 999999,
-      };
+    PlanTier.free => 1,
+    PlanTier.plus => 3,
+    PlanTier.pro => 999999,
+  };
 
   int get maxTeamMembers => switch (tier) {
-        PlanTier.free => 1,
-        PlanTier.plus => 3,
-        PlanTier.pro => 999999,
-      };
+    PlanTier.free => 1,
+    PlanTier.plus => 3,
+    PlanTier.pro => 999999,
+  };
 }

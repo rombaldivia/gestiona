@@ -20,12 +20,10 @@ class HomePage extends StatelessWidget {
             tooltip: 'Cerrar sesión',
             onPressed: _logout,
             icon: const Icon(Icons.logout),
-          )
+          ),
         ],
       ),
-      body: Center(
-        child: Text('Logueado como: ${user?.email ?? "?"}'),
-      ),
+      body: Center(child: Text('Logueado como: ${user?.email ?? "?"}')),
     );
   }
 }

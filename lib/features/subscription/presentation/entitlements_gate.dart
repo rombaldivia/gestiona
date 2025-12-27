@@ -6,11 +6,7 @@ import '../data/user_bootstrapper.dart';
 import 'entitlements_scope.dart';
 
 class EntitlementsGate extends StatefulWidget {
-  const EntitlementsGate({
-    super.key,
-    required this.user,
-    required this.child,
-  });
+  const EntitlementsGate({super.key, required this.user, required this.child});
 
   final User user;
   final Widget child;
@@ -40,10 +36,7 @@ class _EntitlementsGateState extends State<EntitlementsGate> {
           );
         }
 
-        return EntitlementsScope(
-          entitlements: snap.data!,
-          child: widget.child,
-        );
+        return EntitlementsScope(entitlements: snap.data!, child: widget.child);
       },
     );
   }

@@ -42,12 +42,17 @@ class App extends StatelessWidget {
           color: Colors.white,
           elevation: 0.8,
           shadowColor: Colors.black12,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFD7E1EE)),
@@ -64,7 +69,9 @@ class App extends StatelessWidget {
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             textStyle: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
@@ -95,7 +102,9 @@ class AuthGate extends StatelessWidget {
       stream: auth.authStateChanges(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final user = snap.data;
@@ -103,10 +112,7 @@ class AuthGate extends StatelessWidget {
 
         return EntitlementsGate(
           user: user,
-          child: CompanyGate(
-            auth: auth,
-            user: user,
-          ),
+          child: CompanyGate(auth: auth, user: user),
         );
       },
     );

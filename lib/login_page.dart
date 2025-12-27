@@ -112,10 +112,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
                 ],
                 const SizedBox(height: 16),
                 Row(
@@ -134,7 +131,9 @@ class _LoginPageState extends State<LoginPage> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Entrar'),
                       ),
