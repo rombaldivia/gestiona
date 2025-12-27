@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import '../../auth/data/auth_service.dart';
-import '../../home/ui/home_page.dart';
-
 import '../../subscription/presentation/entitlements_scope.dart';
-import '../data/company_repository.dart';
-import '../domain/company_summary.dart';
+import '../data/company_offline_first_service.dart';
+import '../presentation/company_scope.dart';
+import '../ui/create_company_page.dart';
+import '../../home/ui/home_page.dart';
 
 class CompanyGate extends StatefulWidget {
   const CompanyGate({
@@ -23,101 +23,98 @@ class CompanyGate extends StatefulWidget {
 }
 
 class _CompanyGateState extends State<CompanyGate> {
-  final _repo = CompanyRepository();
-  String? _selectedCompanyId;
+  late final CompanyOfflineFirstService _service;
+
+  String? _companyId;
+  String? _companyName;
+  bool _loading = true;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void initState() {
+    super.initState();
+    _service = CompanyOfflineFirstService();
+    _loadActiveFromLocal();
+  }
 
-    // Free => 1 empresa local fija
-    final ent = EntitlementsScope.of(context);
-    if (!ent.multiCompany && _selectedCompanyId == null) {
-      _selectedCompanyId = 'local-default';
-    }
+  Future<void> _loadActiveFromLocal() async {
+    final active = await _service.getActiveLocalCompany();
+    if (!mounted) return;
+
+    setState(() {
+      _companyId = active?.$1;
+      _companyName = active?.$2;
+      _loading = false;
+    });
+  }
+
+  Future<void> _ensureCompany() async {
+    // Abre pantalla crear empresa. Al volver, recarga local.
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CreateCompanyPage(service: _service),
+      ),
+    );
+    await _loadActiveFromLocal();
   }
 
   @override
   Widget build(BuildContext context) {
     final ent = EntitlementsScope.of(context);
 
-    // FREE => directo
-    if (!ent.multiCompany) {
-      return HomePage(
-        auth: widget.auth,
-        companyId: _selectedCompanyId ?? 'local-default',
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // PLUS/PRO => selector si no hay empresa seleccionada
-    if (_selectedCompanyId == null) {
-      return StreamBuilder<List<CompanySummary>>(
-        stream: _repo.watchUserCompanies(widget.user.uid),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          final companies = snap.data ?? const <CompanySummary>[];
-
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Elegí una empresa'),
-            ),
-            body: Padding(
-              padding: const EdgeInsets.all(16),
+    if (_companyId == null || _companyName == null) {
+      // No hay empresa guardada -> crear
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: 420,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Plan: ${ent.tier.asString.toUpperCase()}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  const Icon(Icons.apartment, size: 56),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Bienvenido 👋',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
-                  const Text('Estas son las empresas vinculadas a tu cuenta.'),
+                  const Text('Crea tu primera empresa para empezar.'),
                   const SizedBox(height: 16),
-
-                  if (companies.isEmpty) ...[
-                    const Text(
-                      'No tenés empresas todavía en la nube.\n'
-                      'Más adelante agregamos “Crear empresa”.',
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _ensureCompany,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Crear empresa'),
                     ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () {
-                        // Placeholder para no bloquearte ahora:
-                        setState(() => _selectedCompanyId = 'default');
-                      },
-                      child: const Text('Usar empresa "default" por ahora'),
-                    ),
-                  ] else ...[
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: companies.length,
-                        separatorBuilder: (context, index) => const Divider(),
-                        itemBuilder: (context, i) {
-                          final c = companies[i];
-                          return ListTile(
-                            title: Text(c.name),
-                            subtitle: Text('ID: ${c.id}'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => setState(() => _selectedCompanyId = c.id),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
               ),
             ),
-          );
-        },
+          ),
+        ),
       );
     }
 
-    // Ya hay empresa seleccionada
-    return HomePage(auth: widget.auth, companyId: _selectedCompanyId!);
+    return CompanyScope(
+      companyId: _companyId!,
+      companyName: _companyName!,
+      child: HomePage(
+        auth: widget.auth,
+        user: widget.user,
+        onSyncPressed: () async {
+          // Sync del active local -> nube, solo Plus/Pro
+          // (el botón en UI ya está disabled si no cloudSync)
+          await _service.syncActiveCompany(ent: ent);
+        },
+      ),
+    );
   }
 }
