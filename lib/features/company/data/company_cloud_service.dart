@@ -9,10 +9,13 @@ class CompanyCloudService {
     required String name,
   }) async {
     final ref = _db.collection('companies').doc(companyId);
+
+    // Nota: usamos ownerUid (no ownerId) para alinearnos con reglas Firestore.
     await ref.set({
       'name': name,
-      'ownerId': uid,
+      'ownerUid': uid,
       'updatedAt': FieldValue.serverTimestamp(),
+      // createdAt solo se escribe si el doc no existía (merge mantiene el anterior).
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -24,7 +27,6 @@ class CompanyCloudService {
   }) async {
     final ref = _db.collection('users').doc(uid);
     await ref.set({
-      'uid': uid,
       'activeCompanyId': companyId,
       'activeCompanyName': companyName,
       'updatedAt': FieldValue.serverTimestamp(),
