@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/data/auth_service.dart';
 import '../../home/ui/home_page.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
+import '../data/company_local_store.dart';
 import '../data/company_offline_first_service.dart';
 import 'company_scope.dart';
 
@@ -23,14 +24,17 @@ class CompanyGate extends StatefulWidget {
 
 class _CompanyGateState extends State<CompanyGate> {
   final _service = CompanyOfflineFirstService();
+  final _local = CompanyLocalStore();
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
 
   bool _booting = true;
   String? _companyId;
   String? _companyName;
 
-  String get _kId => 'activeCompanyId_${widget.user.uid}';
-  String get _kName => 'activeCompanyName_${widget.user.uid}';
+  // Legacy keys (se usaban antes directo en SharedPreferences).
+  // Los mantenemos para migrar y para no romper instalaciones existentes.
+  String get _legacyIdKey => 'activeCompanyId_${widget.user.uid}';
+  String get _legacyNameKey => 'activeCompanyName_${widget.user.uid}';
 
   @override
   void initState() {
@@ -39,47 +43,64 @@ class _CompanyGateState extends State<CompanyGate> {
   }
 
   Future<void> _loadLocalThenListenCloud() async {
-    // 1) Local first
-    final prefs = await SharedPreferences.getInstance();
-    final localId = prefs.getString(_kId);
-    final localName = prefs.getString(_kName);
+    // 1) Local (nuevo storage)
+    final local = await _service.getActiveLocalCompany(uid: widget.user.uid);
 
-    if (mounted && localId != null && localName != null) {
-      setState(() {
-        _companyId = localId;
-        _companyName = localName;
-        _booting = false;
-      });
+    // 2) Si no hay en nuevo storage, intenta migrar desde legacy prefs
+    if (local == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final legacyId = prefs.getString(_legacyIdKey);
+      final legacyName = prefs.getString(_legacyNameKey);
+
+      if (legacyId != null && legacyName != null) {
+        await _local.setActiveCompany(uid: widget.user.uid, id: legacyId, name: legacyName);
+        if (mounted) {
+          setState(() {
+            _companyId = legacyId;
+            _companyName = legacyName;
+            _booting = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _booting = false);
+      }
     } else {
       if (mounted) {
-        setState(() => _booting = false);
+        setState(() {
+          _companyId = local.$1;
+          _companyName = local.$2;
+          _booting = false;
+        });
       }
     }
 
-    // 2) Cloud realtime (si existe doc, actualiza y guarda local)
+    // 3) Cloud realtime: si existe doc, actualiza local (y opcionalmente legacy)
     _sub = FirebaseFirestore.instance
         .collection('users')
         .doc(widget.user.uid)
         .snapshots()
         .listen((snap) async {
-          final data = snap.data();
-          if (data == null) return;
+      final data = snap.data();
+      if (data == null) return;
 
-          final cid = data['activeCompanyId'] as String?;
-          final cname = data['activeCompanyName'] as String?;
+      final cid = data['activeCompanyId'] as String?;
+      final cname = data['activeCompanyName'] as String?;
+      if (cid == null || cname == null) return;
 
-          if (cid != null && cname != null) {
-            final prefs2 = await SharedPreferences.getInstance();
-            await prefs2.setString(_kId, cid);
-            await prefs2.setString(_kName, cname);
+      // Guarda a storage nuevo
+      await _local.setActiveCompany(uid: widget.user.uid, id: cid, name: cname);
 
-            if (!mounted) return;
-            setState(() {
-              _companyId = cid;
-              _companyName = cname;
-            });
-          }
-        });
+      // Mantén legacy actualizado (por compatibilidad)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_legacyIdKey, cid);
+      await prefs.setString(_legacyNameKey, cname);
+
+      if (!mounted) return;
+      setState(() {
+        _companyId = cid;
+        _companyName = cname;
+      });
+    });
   }
 
   @override
@@ -91,20 +112,24 @@ class _CompanyGateState extends State<CompanyGate> {
   Future<void> _createCompany(String name) async {
     final ent = EntitlementsScope.of(context);
 
-    final companyId = await _service.createCompanyOfflineFirst(
+    await _service.createCompanyOfflineFirst(
       companyName: name,
       ent: ent,
     );
 
-    // guarda local inmediato (para Free también)
+    // Lee desde storage nuevo (fuente de verdad)
+    final local = await _service.getActiveLocalCompany(uid: widget.user.uid);
+    if (local == null) return;
+
+    // Mantén legacy actualizado
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kId, companyId);
-    await prefs.setString(_kName, name);
+    await prefs.setString(_legacyIdKey, local.$1);
+    await prefs.setString(_legacyNameKey, local.$2);
 
     if (!mounted) return;
     setState(() {
-      _companyId = companyId;
-      _companyName = name;
+      _companyId = local.$1;
+      _companyName = local.$2;
     });
   }
 
@@ -149,33 +174,24 @@ class _CompanyGateState extends State<CompanyGate> {
     );
 
     if (newName == null) return;
-    if (_companyId == null) return;
 
-    // 1) Local update
+    // Renombra usando el servicio (local-first; nube solo Pro)
+    await _service.renameActiveCompany(newName: newName, ent: ent);
+
+    // Relee desde storage nuevo
+    final local = await _service.getActiveLocalCompany(uid: widget.user.uid);
+    if (local == null) return;
+
+    // Mantén legacy actualizado
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kName, newName);
+    await prefs.setString(_legacyIdKey, local.$1);
+    await prefs.setString(_legacyNameKey, local.$2);
 
     if (!mounted) return;
-    setState(() => _companyName = newName);
-
-    // 2) Cloud update (solo Plus/Pro)
-    if (ent.cloudSync) {
-      final now = FieldValue.serverTimestamp();
-      final cid = _companyId!;
-
-      await FirebaseFirestore.instance.collection('companies').doc(cid).set({
-        'name': newName,
-        'updatedAt': now,
-      }, SetOptions(merge: true));
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.user.uid)
-          .set({
-            'activeCompanyName': newName,
-            'updatedAt': now,
-          }, SetOptions(merge: true));
-    }
+    setState(() {
+      _companyId = local.$1;
+      _companyName = local.$2;
+    });
   }
 
   @override
@@ -184,7 +200,6 @@ class _CompanyGateState extends State<CompanyGate> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // si no hay empresa, crear
     if (_companyId == null || _companyName == null) {
       return _CreateCompanyInline(onCreate: _createCompany);
     }
