@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'features/auth/data/auth_service.dart';
+import 'core/di/providers.dart';
 import 'features/auth/ui/login_page.dart';
-
-import 'features/subscription/presentation/entitlements_gate.dart';
 import 'features/company/presentation/company_gate.dart';
+import 'features/subscription/presentation/entitlements_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const App());
+  runApp(const ProviderScope(child: App()));
 }
 
 class App extends StatelessWidget {
@@ -18,8 +18,6 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthService();
-
     final colorScheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF2F6DAE), // azul calmado
       brightness: Brightness.light,
@@ -49,10 +47,7 @@ class App extends StatelessWidget {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 14,
-          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFD7E1EE)),
@@ -87,27 +82,32 @@ class App extends StatelessWidget {
           color: Color(0xFFE6EEF7),
         ),
       ),
-      home: AuthGate(auth: auth),
+      home: const AuthGate(),
     );
   }
 }
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key, required this.auth});
-  final AuthService auth;
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder(
-      stream: auth.authStateChanges(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authServiceProvider);
+    final authState = ref.watch(authStateProvider);
 
-        final user = snap.data;
+    return authState.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('Error de autenticación: $e'),
+          ),
+        ),
+      ),
+      data: (user) {
         if (user == null) return LoginPage(auth: auth);
 
         return EntitlementsGate(
