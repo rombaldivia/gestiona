@@ -168,7 +168,7 @@ class HomePage extends StatelessWidget {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              side: BorderSide(color: Colors.black.withOpacity(0.06)),
+              side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -225,24 +225,24 @@ class _PremiumCard extends StatelessWidget {
 
     switch (variant) {
       case _CardVariant.primary:
-        bg = scheme.primaryContainer.withOpacity(0.85);
-        border = scheme.primary.withOpacity(0.18);
+        bg = scheme.primaryContainer.withValues(alpha: 0.85);
+        border = scheme.primary.withValues(alpha: 0.18);
         titleColor = scheme.onPrimaryContainer;
-        subColor = scheme.onPrimaryContainer.withOpacity(0.85);
+        subColor = scheme.onPrimaryContainer.withValues(alpha: 0.85);
         buttonBg = scheme.primary;
         buttonFg = scheme.onPrimary;
         break;
       case _CardVariant.accent:
-        bg = scheme.tertiaryContainer.withOpacity(0.85);
-        border = scheme.tertiary.withOpacity(0.18);
+        bg = scheme.tertiaryContainer.withValues(alpha: 0.85);
+        border = scheme.tertiary.withValues(alpha: 0.18);
         titleColor = scheme.onTertiaryContainer;
-        subColor = scheme.onTertiaryContainer.withOpacity(0.85);
+        subColor = scheme.onTertiaryContainer.withValues(alpha: 0.85);
         buttonBg = scheme.tertiary;
         buttonFg = scheme.onTertiary;
         break;
       case _CardVariant.neutral:
-        bg = scheme.surfaceContainerHighest.withOpacity(0.55);
-        border = Colors.black.withOpacity(0.08);
+        bg = scheme.surfaceContainerHighest.withValues(alpha: 0.55);
+        border = Colors.black.withValues(alpha: 0.08);
         titleColor = scheme.onSurface;
         subColor = scheme.onSurfaceVariant;
         buttonBg = scheme.primary;
@@ -322,9 +322,9 @@ class _FlowItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withOpacity(0.55),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
