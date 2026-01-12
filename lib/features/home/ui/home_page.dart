@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
+import '../../inventory/ui/inventory_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -145,7 +146,11 @@ class HomePage extends StatelessWidget {
                   title: 'Inventario',
                   subtitle: 'Stock y movimientos',
                   buttonText: 'Ver stock',
-                  onPressed: () => _todo(context, 'Inventario'),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const InventoryPage()),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 12),
@@ -212,8 +217,6 @@ class _PremiumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Premium moderno sin depender de colores hardcodeados fuertes:
-    // Usamos el Theme para que se sienta coherente con tu paleta.
     final scheme = Theme.of(context).colorScheme;
 
     Color bg;
