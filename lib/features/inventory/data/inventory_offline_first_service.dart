@@ -44,6 +44,10 @@ class InventoryOfflineFirstService {
     if (user == null) throw StateError('No hay usuario autenticado.');
     final uid = user.uid;
 
+    // 🔎 LOG CLAVE
+    // ignore: avoid_print
+    print('🧩 upsertItemOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
+
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == item.id);
 
@@ -57,13 +61,22 @@ class InventoryOfflineFirstService {
 
     await _local.saveItems(uid: uid, companyId: companyId, items: items);
 
-    if (ent.cloudSync) {
-      try {
-        await _cloud.upsertItem(companyId: companyId, uid: uid, item: dirtyItem);
-        await _markItemClean(companyId: companyId, itemId: dirtyItem.id);
-      } catch (_) {
-        // queda dirty para sync posterior
-      }
+    if (!ent.cloudSync) {
+      // ignore: avoid_print
+      print('⛔ cloudSync=false, NO se sube a Firestore (plan FREE).');
+      return;
+    }
+
+    try {
+      await _cloud.upsertItem(companyId: companyId, uid: uid, item: dirtyItem);
+      await _markItemClean(companyId: companyId, itemId: dirtyItem.id);
+      // ignore: avoid_print
+      print('✅ Item subido a Firestore OK');
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('🔥 Inventory sync error (upsert): $e');
+      // ignore: avoid_print
+      print(st);
     }
   }
 
@@ -80,12 +93,15 @@ class InventoryOfflineFirstService {
     items.removeWhere((e) => e.id == itemId);
     await _local.saveItems(uid: uid, companyId: companyId, items: items);
 
-    if (ent.cloudSync) {
-      try {
-        await _cloud.deleteItem(companyId: companyId, itemId: itemId);
-      } catch (_) {
-        // en MVP no guardamos 'tombstones'
-      }
+    if (!ent.cloudSync) return;
+
+    try {
+      await _cloud.deleteItem(companyId: companyId, itemId: itemId);
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('🔥 Inventory sync error (delete): $e');
+      // ignore: avoid_print
+      print(st);
     }
   }
 
@@ -99,6 +115,9 @@ class InventoryOfflineFirstService {
     final user = _auth.currentUser;
     if (user == null) throw StateError('No hay usuario autenticado.');
     final uid = user.uid;
+
+    // ignore: avoid_print
+    print('🧩 adjustStockOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == itemId);
@@ -122,15 +141,20 @@ class InventoryOfflineFirstService {
     moves.add(movement.copyWith(dirty: true));
     await _local.saveMovements(uid: uid, companyId: companyId, movements: moves);
 
-    if (ent.cloudSync) {
-      try {
-        await _cloud.upsertItem(companyId: companyId, uid: uid, item: updated);
-        await _cloud.addMovement(companyId: companyId, uid: uid, m: movement);
-        await _markItemClean(companyId: companyId, itemId: itemId);
-        await _markMovementClean(companyId: companyId, movementId: movement.id);
-      } catch (_) {
-        // queda dirty
-      }
+    if (!ent.cloudSync) return;
+
+    try {
+      await _cloud.upsertItem(companyId: companyId, uid: uid, item: updated);
+      await _cloud.addMovement(companyId: companyId, uid: uid, m: movement);
+      await _markItemClean(companyId: companyId, itemId: itemId);
+      await _markMovementClean(companyId: companyId, movementId: movement.id);
+      // ignore: avoid_print
+      print('✅ Stock + movimiento subidos a Firestore OK');
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('🔥 Inventory sync error (adjust): $e');
+      // ignore: avoid_print
+      print(st);
     }
   }
 
@@ -143,29 +167,38 @@ class InventoryOfflineFirstService {
     if (user == null) return 0;
     final uid = user.uid;
 
+    // ignore: avoid_print
+    print('🧩 syncPending uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
+
     int synced = 0;
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final moves = await _local.listMovements(uid: uid, companyId: companyId);
 
     for (final it in items.where((e) => e.dirty)) {
-      await _cloud.upsertItem(companyId: companyId, uid: uid, item: it);
-      synced++;
-    }
-    for (final m in moves.where((e) => e.dirty)) {
-      await _cloud.addMovement(companyId: companyId, uid: uid, m: m);
-      synced++;
+      try {
+        await _cloud.upsertItem(companyId: companyId, uid: uid, item: it);
+        await _markItemClean(companyId: companyId, itemId: it.id);
+        synced++;
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('🔥 Inventory syncPending item error: $e');
+        // ignore: avoid_print
+        print(st);
+      }
     }
 
-    await _local.saveItems(
-      uid: uid,
-      companyId: companyId,
-      items: items.map((e) => e.copyWith(dirty: false)).toList(),
-    );
-    await _local.saveMovements(
-      uid: uid,
-      companyId: companyId,
-      movements: moves.map((e) => e.copyWith(dirty: false)).toList(),
-    );
+    for (final mv in moves.where((e) => e.dirty)) {
+      try {
+        await _cloud.addMovement(companyId: companyId, uid: uid, m: mv);
+        await _markMovementClean(companyId: companyId, movementId: mv.id);
+        synced++;
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('🔥 Inventory syncPending movement error: $e');
+        // ignore: avoid_print
+        print(st);
+      }
+    }
 
     return synced;
   }
@@ -177,9 +210,11 @@ class InventoryOfflineFirstService {
     final user = _auth.currentUser;
     if (user == null) return;
     final uid = user.uid;
+
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == itemId);
     if (idx < 0) return;
+
     items[idx] = items[idx].copyWith(dirty: false);
     await _local.saveItems(uid: uid, companyId: companyId, items: items);
   }
@@ -191,36 +226,12 @@ class InventoryOfflineFirstService {
     final user = _auth.currentUser;
     if (user == null) return;
     final uid = user.uid;
+
     final moves = await _local.listMovements(uid: uid, companyId: companyId);
     final idx = moves.indexWhere((e) => e.id == movementId);
     if (idx < 0) return;
+
     moves[idx] = moves[idx].copyWith(dirty: false);
     await _local.saveMovements(uid: uid, companyId: companyId, movements: moves);
-  }
-}
-
-extension on StockMovement {
-  StockMovement copyWith({
-    String? id,
-    String? itemId,
-    StockMovementType? type,
-    double? qty,
-    String? note,
-    String? refType,
-    String? refId,
-    int? createdAtMs,
-    bool? dirty,
-  }) {
-    return StockMovement(
-      id: id ?? this.id,
-      itemId: itemId ?? this.itemId,
-      type: type ?? this.type,
-      qty: qty ?? this.qty,
-      note: note ?? this.note,
-      refType: refType ?? this.refType,
-      refId: refId ?? this.refId,
-      createdAtMs: createdAtMs ?? this.createdAtMs,
-      dirty: dirty ?? this.dirty,
-    );
   }
 }
