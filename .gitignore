@@ -33,3 +33,7 @@ ios/Flutter/ephemeral/
 # Firebase (NO subas secretos)
 **/google-services.json
 **/GoogleService-Info.plist
+
+# Flutter tooling
+.flutter-plugins-dependencies
+.flutter-plugins
