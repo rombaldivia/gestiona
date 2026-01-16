@@ -198,9 +198,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nombre requerido.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nombre requerido.')));
       return;
     }
 
@@ -220,7 +220,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
       unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
       salePrice: price,
       cost: cost,
-      stock: _kind == InventoryItemKind.service ? 0 : (widget.initial?.stock ?? 0),
+      stock: _kind == InventoryItemKind.service
+          ? 0
+          : (widget.initial?.stock ?? 0),
       minStock: _supportsStock ? _parseDouble(_min) : null,
       updatedAtMs: now,
       dirty: true,
@@ -241,12 +243,7 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Guardar'),
-          )
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Guardar'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -263,10 +260,7 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                 isExpanded: true,
                 items: InventoryItemKind.values
                     .map(
-                      (k) => DropdownMenuItem(
-                        value: k,
-                        child: Text(k.label),
-                      ),
+                      (k) => DropdownMenuItem(value: k, child: Text(k.label)),
                     )
                     .toList(),
                 onChanged: (v) {
@@ -382,7 +376,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_kind != InventoryItemKind.service) ...[
             TextField(
               controller: _cost,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Costo (opcional)',
                 hintText: 'Ej: 35',
@@ -424,7 +420,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
               const SizedBox(height: 8),
               TextField(
                 controller: _markup,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: '% margen',
                   suffixText: '%',
@@ -446,7 +444,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_supportsStock) ...[
             TextField(
               controller: _min,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Stock mínimo (alerta)',
                 hintText: 'Ej: 5',

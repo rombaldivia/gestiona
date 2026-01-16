@@ -15,7 +15,7 @@ class InventoryController extends AsyncNotifier<InventoryState> {
 
   @override
   Future<InventoryState> build() async {
-    final user = ref.watch(authStateProvider).value;
+    final user = await ref.watch(authStateProvider.future);
     if (user == null) {
       _companyId = null;
       return const InventoryState(items: []);
@@ -51,13 +51,13 @@ class InventoryController extends AsyncNotifier<InventoryState> {
   }
 
   Future<Entitlements> _getFreshEntitlements() async {
-    final user = ref.read(authStateProvider).value;
+    final user = await ref.read(authStateProvider.future);
     if (user == null) {
       throw StateError('No hay usuario autenticado.');
     }
     final ent = await ref.read(entitlementsProvider(user).future);
     // ignore: avoid_print
-    print('🧾 controller fresh ent: uid=${user.uid} tier=${ent.tier} cloudSync=${ent.cloudSync}');
+    print('🧾 controller fresh ent: uid= tier= cloudSync=');
     return ent;
   }
 
@@ -129,7 +129,9 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     final freshEnt = await _getFreshEntitlements();
 
     // ignore: avoid_print
-    print('🔄 controller sync requested: companyId=$_companyId tier=${freshEnt.tier} cloudSync=${freshEnt.cloudSync}');
+    print(
+      '🔄 controller sync requested: companyId=$_companyId tier=${freshEnt.tier} cloudSync=${freshEnt.cloudSync}',
+    );
     return 0;
   }
 }

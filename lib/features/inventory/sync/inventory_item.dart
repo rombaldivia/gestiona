@@ -14,11 +14,11 @@ class InventoryItem {
   });
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'qty': qty,
-        if (extra != null) ...extra!,
-      };
+    'id': id,
+    'name': name,
+    'qty': qty,
+    if (extra != null) ...extra!,
+  };
 
   factory InventoryItem.fromMap(Map<String, dynamic> map) {
     final extra = Map<String, dynamic>.from(map);

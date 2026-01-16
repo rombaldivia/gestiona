@@ -9,8 +9,8 @@ import 'pending_change.dart';
 ///   /companies/{companyId}/inventory/{itemId}
 class InventoryCloudService {
   InventoryCloudService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
@@ -32,7 +32,11 @@ class InventoryCloudService {
   }
 
   /// Borra un item. Por defecto realiza soft-delete (marca deleted=true).
-  Future<void> deleteItem(String companyId, String itemId, {bool soft = true}) async {
+  Future<void> deleteItem(
+    String companyId,
+    String itemId, {
+    bool soft = true,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) throw StateError('Usuario no autenticado');
 
@@ -49,7 +53,10 @@ class InventoryCloudService {
   }
 
   /// Aplica una lista de cambios usando WriteBatch. Chunk en 400 ops para margen.
-  Future<void> applyBatchChanges(String companyId, List<PendingChange> changes) async {
+  Future<void> applyBatchChanges(
+    String companyId,
+    List<PendingChange> changes,
+  ) async {
     if (changes.isEmpty) return;
 
     final user = _auth.currentUser;
@@ -86,7 +93,8 @@ class InventoryCloudService {
 
   /// Escucha en tiempo real la colección de inventory de la company.
   Stream<List<InventoryItem>> watchItems(String companyId) {
-    return _inventoryCol(companyId).snapshots().map((snap) =>
-        snap.docs.map((d) => InventoryItem.fromMap(d.data())).toList());
+    return _inventoryCol(companyId).snapshots().map(
+      (snap) => snap.docs.map((d) => InventoryItem.fromMap(d.data())).toList(),
+    );
   }
 }

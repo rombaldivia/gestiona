@@ -5,5 +5,5 @@ import 'inventory_state.dart';
 
 final inventoryControllerProvider =
     AsyncNotifierProvider<InventoryController, InventoryState>(
-  InventoryController.new,
-);
+      InventoryController.new,
+    );

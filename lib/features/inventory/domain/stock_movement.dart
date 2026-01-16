@@ -54,25 +54,23 @@ class StockMovement {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'itemId': itemId,
-        'type': type.name,
-        'qty': qty,
-        'note': note,
-        'refType': refType,
-        'refId': refId,
-        'createdAtMs': createdAtMs,
-        'dirty': dirty,
-      };
+    'id': id,
+    'itemId': itemId,
+    'type': type.name,
+    'qty': qty,
+    'note': note,
+    'refType': refType,
+    'refId': refId,
+    'createdAtMs': createdAtMs,
+    'dirty': dirty,
+  };
 
   factory StockMovement.fromJson(Map<String, dynamic> json) {
     final typeStr = (json['type'] as String?) ?? StockMovementType.adjust.name;
-    final type = StockMovementType.values
-        .cast<StockMovementType>()
-        .firstWhere(
-          (e) => e.name == typeStr,
-          orElse: () => StockMovementType.adjust,
-        );
+    final type = StockMovementType.values.cast<StockMovementType>().firstWhere(
+      (e) => e.name == typeStr,
+      orElse: () => StockMovementType.adjust,
+    );
 
     return StockMovement(
       id: (json['id'] as String?) ?? '',

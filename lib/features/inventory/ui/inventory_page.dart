@@ -30,7 +30,9 @@ class InventoryPage extends ConsumerWidget {
                 ? () async {
                     final messenger = ScaffoldMessenger.of(context);
                     messenger.showSnackBar(
-                      const SnackBar(content: Text('Sincronizando inventario...')),
+                      const SnackBar(
+                        content: Text('Sincronizando inventario...'),
+                      ),
                     );
                     try {
                       final n = await ctrl.sync(ent: ent);
@@ -95,7 +97,8 @@ class InventoryPage extends ConsumerWidget {
                               final item = s.filtered[i];
                               final isService =
                                   item.kind == InventoryItemKind.service;
-                              final low = item.minStock != null &&
+                              final low =
+                                  item.minStock != null &&
                                   item.stock <= item.minStock!;
 
                               return Card(
@@ -117,8 +120,10 @@ class InventoryPage extends ConsumerWidget {
                                       if (item.dirty)
                                         const Padding(
                                           padding: EdgeInsets.only(left: 8),
-                                          child:
-                                              Icon(Icons.cloud_off, size: 18),
+                                          child: Icon(
+                                            Icons.cloud_off,
+                                            size: 18,
+                                          ),
                                         ),
                                     ],
                                   ),
@@ -162,7 +167,7 @@ class InventoryPage extends ConsumerWidget {
                                               ),
                                             ],
                                           ),
-                                        ]
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -187,16 +192,19 @@ class InventoryPage extends ConsumerWidget {
                                       } else if (v == 'edit') {
                                         final edited =
                                             await Navigator.push<InventoryItem>(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                InventoryItemFormPage(
-                                                    initial: item),
-                                          ),
-                                        );
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    InventoryItemFormPage(
+                                                      initial: item,
+                                                    ),
+                                              ),
+                                            );
                                         if (edited != null) {
                                           await ctrl.upsertItem(
-                                              item: edited, ent: ent);
+                                            item: edited,
+                                            ent: ent,
+                                          );
                                         }
                                       } else if (v == 'del') {
                                         final ok = await showDialog<bool>(
@@ -204,18 +212,21 @@ class InventoryPage extends ConsumerWidget {
                                           builder: (_) => AlertDialog(
                                             title: const Text('Eliminar ítem'),
                                             content: Text(
-                                                '¿Eliminar "${item.name}"?'),
+                                              '¿Eliminar "${item.name}"?',
+                                            ),
                                             actions: [
                                               TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(context,
-                                                        false),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  false,
+                                                ),
                                                 child: const Text('Cancelar'),
                                               ),
                                               FilledButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(
-                                                        context, true),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  true,
+                                                ),
                                                 child: const Text('Eliminar'),
                                               ),
                                             ],
@@ -223,7 +234,9 @@ class InventoryPage extends ConsumerWidget {
                                         );
                                         if (ok == true) {
                                           await ctrl.deleteItem(
-                                              itemId: item.id, ent: ent);
+                                            itemId: item.id,
+                                            ent: ent,
+                                          );
                                         }
                                       }
                                     },
@@ -303,10 +316,7 @@ class _KindChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelSmall,
-      ),
+      child: Text(text, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 }
@@ -363,8 +373,7 @@ Future<void> _askAdjust(
         ),
         FilledButton(
           onPressed: () {
-            final qty =
-                double.tryParse(qtyC.text.trim().replaceAll(',', '.'));
+            final qty = double.tryParse(qtyC.text.trim().replaceAll(',', '.'));
             if (qty == null || qty <= 0) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Cantidad inválida.')),
@@ -375,7 +384,7 @@ Future<void> _askAdjust(
             Navigator.pop(context, (qty, note.isEmpty ? null : note));
           },
           child: const Text('Aplicar'),
-        )
+        ),
       ],
     ),
   );

@@ -7,10 +7,8 @@ import 'pending_change.dart';
 /// Sync manager que coordina local store y cloud service.
 /// Usa la interfaz InventoryLocalStore para interactuar con tu almacenamiento local.
 class InventorySyncManager {
-  InventorySyncManager({
-    required this.local,
-    InventoryCloudService? cloud,
-  }) : _cloud = cloud ?? InventoryCloudService();
+  InventorySyncManager({required this.local, InventoryCloudService? cloud})
+    : _cloud = cloud ?? InventoryCloudService();
 
   final InventoryLocalStore local;
   final InventoryCloudService _cloud;
@@ -25,7 +23,9 @@ class InventorySyncManager {
     if (_syncInProgress[companyId] == true) return;
     _syncInProgress[companyId] = true;
     try {
-      final List<PendingChange> pending = await local.listPendingChanges(companyId);
+      final List<PendingChange> pending = await local.listPendingChanges(
+        companyId,
+      );
       if (pending.isEmpty) return;
 
       // Aplica cambios en cloud
@@ -38,7 +38,9 @@ class InventorySyncManager {
       // Aquí podrías implementar retries/exponential backoff o markFailed.
       // Ejemplo simple: intentar marcar como falladas para inspección.
       try {
-        final List<PendingChange> pending = await local.listPendingChanges(companyId);
+        final List<PendingChange> pending = await local.listPendingChanges(
+          companyId,
+        );
         final ids = pending.map((p) => p.id).toList();
         await local.markFailed(ids, e.toString());
       } catch (_) {

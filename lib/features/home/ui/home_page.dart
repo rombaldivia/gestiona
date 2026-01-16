@@ -23,9 +23,9 @@ class HomePage extends StatelessWidget {
   Future<void> _signOut() async => auth.signOut();
 
   void _todo(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label (pendiente de conectar)')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label (pendiente de conectar)')));
   }
 
   @override
@@ -90,7 +90,7 @@ class HomePage extends StatelessWidget {
                 child: Text('Cerrar sesión'),
               ),
             ],
-          )
+          ),
         ],
       ),
       body: ListView(
@@ -105,10 +105,7 @@ class HomePage extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              Text(
-                'Hoy',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text('Hoy', style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
           const SizedBox(height: 12),
@@ -277,13 +274,7 @@ class _PremiumCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: subColor,
-                ),
-              ),
+              Text(subtitle, style: TextStyle(fontSize: 12.5, color: subColor)),
               const Spacer(),
               SizedBox(
                 width: double.infinity,
@@ -303,7 +294,7 @@ class _PremiumCard extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-              )
+              ),
             ],
           ),
         ),

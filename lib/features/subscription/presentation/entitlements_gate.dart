@@ -16,9 +16,8 @@ class EntitlementsGate extends ConsumerWidget {
     final entAsync = ref.watch(entitlementsProvider(user));
 
     return entAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         body: Center(
           child: Padding(

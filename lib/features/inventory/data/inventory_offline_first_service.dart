@@ -11,25 +11,21 @@ class InventoryOfflineFirstService {
     FirebaseAuth? auth,
     InventoryLocalStore? local,
     InventoryCloudService? cloud,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _local = local ?? InventoryLocalStore(),
-        _cloud = cloud ?? InventoryCloudService();
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _local = local ?? InventoryLocalStore(),
+       _cloud = cloud ?? InventoryCloudService();
 
   final FirebaseAuth _auth;
   final InventoryLocalStore _local;
   final InventoryCloudService _cloud;
 
-  Future<List<InventoryItem>> listItems({
-    required String companyId,
-  }) async {
+  Future<List<InventoryItem>> listItems({required String companyId}) async {
     final user = _auth.currentUser;
     if (user == null) return [];
     return _local.listItems(uid: user.uid, companyId: companyId);
   }
 
-  Future<List<StockMovement>> listMovements({
-    required String companyId,
-  }) async {
+  Future<List<StockMovement>> listMovements({required String companyId}) async {
     final user = _auth.currentUser;
     if (user == null) return [];
     return _local.listMovements(uid: user.uid, companyId: companyId);
@@ -46,7 +42,9 @@ class InventoryOfflineFirstService {
 
     // 🔎 LOG CLAVE
     // ignore: avoid_print
-    print('🧩 upsertItemOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
+    print(
+      '🧩 upsertItemOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
+    );
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == item.id);
@@ -117,7 +115,9 @@ class InventoryOfflineFirstService {
     final uid = user.uid;
 
     // ignore: avoid_print
-    print('🧩 adjustStockOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
+    print(
+      '🧩 adjustStockOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
+    );
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == itemId);
@@ -139,7 +139,11 @@ class InventoryOfflineFirstService {
 
     final moves = await _local.listMovements(uid: uid, companyId: companyId);
     moves.add(movement.copyWith(dirty: true));
-    await _local.saveMovements(uid: uid, companyId: companyId, movements: moves);
+    await _local.saveMovements(
+      uid: uid,
+      companyId: companyId,
+      movements: moves,
+    );
 
     if (!ent.cloudSync) return;
 
@@ -168,7 +172,9 @@ class InventoryOfflineFirstService {
     final uid = user.uid;
 
     // ignore: avoid_print
-    print('🧩 syncPending uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}');
+    print(
+      '🧩 syncPending uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
+    );
 
     int synced = 0;
     final items = await _local.listItems(uid: uid, companyId: companyId);
@@ -232,6 +238,10 @@ class InventoryOfflineFirstService {
     if (idx < 0) return;
 
     moves[idx] = moves[idx].copyWith(dirty: false);
-    await _local.saveMovements(uid: uid, companyId: companyId, movements: moves);
+    await _local.saveMovements(
+      uid: uid,
+      companyId: companyId,
+      movements: moves,
+    );
   }
 }
