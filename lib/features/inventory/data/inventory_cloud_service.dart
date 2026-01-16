@@ -5,7 +5,7 @@ import '../domain/stock_movement.dart';
 
 class InventoryCloudService {
   InventoryCloudService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 

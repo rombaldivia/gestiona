@@ -29,26 +29,48 @@ class StockMovement {
   final int createdAtMs;
   final bool dirty;
 
+  StockMovement copyWith({
+    String? id,
+    String? itemId,
+    StockMovementType? type,
+    double? qty,
+    String? note,
+    String? refType,
+    String? refId,
+    int? createdAtMs,
+    bool? dirty,
+  }) {
+    return StockMovement(
+      id: id ?? this.id,
+      itemId: itemId ?? this.itemId,
+      type: type ?? this.type,
+      qty: qty ?? this.qty,
+      note: note ?? this.note,
+      refType: refType ?? this.refType,
+      refId: refId ?? this.refId,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      dirty: dirty ?? this.dirty,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'itemId': itemId,
-        'type': type.name,
-        'qty': qty,
-        'note': note,
-        'refType': refType,
-        'refId': refId,
-        'createdAtMs': createdAtMs,
-        'dirty': dirty,
-      };
+    'id': id,
+    'itemId': itemId,
+    'type': type.name,
+    'qty': qty,
+    'note': note,
+    'refType': refType,
+    'refId': refId,
+    'createdAtMs': createdAtMs,
+    'dirty': dirty,
+  };
 
   factory StockMovement.fromJson(Map<String, dynamic> json) {
     final typeStr = (json['type'] as String?) ?? StockMovementType.adjust.name;
-    final type = StockMovementType.values
-        .cast<StockMovementType>()
-        .firstWhere(
-          (e) => e.name == typeStr,
-          orElse: () => StockMovementType.adjust,
-        );
+    final type = StockMovementType.values.cast<StockMovementType>().firstWhere(
+      (e) => e.name == typeStr,
+      orElse: () => StockMovementType.adjust,
+    );
 
     return StockMovement(
       id: (json['id'] as String?) ?? '',

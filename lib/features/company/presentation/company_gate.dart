@@ -19,9 +19,8 @@ class CompanyGate extends ConsumerWidget {
     final asyncCompany = ref.watch(companyControllerProvider);
 
     return asyncCompany.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         body: Center(
           child: Padding(
@@ -35,7 +34,7 @@ class CompanyGate extends ConsumerWidget {
                   onPressed: () =>
                       ref.read(companyControllerProvider.notifier).reload(),
                   child: const Text('Reintentar'),
-                )
+                ),
               ],
             ),
           ),

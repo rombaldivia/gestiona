@@ -33,7 +33,9 @@ class TaxesRedirectPage extends StatelessWidget {
                   child: FilledButton(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('URL pendiente de definir')),
+                        const SnackBar(
+                          content: Text('URL pendiente de definir'),
+                        ),
                       );
                     },
                     child: const Text('Abrir impuestos'),

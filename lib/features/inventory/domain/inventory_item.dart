@@ -2,16 +2,16 @@ enum InventoryItemKind { service, insumo, articulo }
 
 extension InventoryItemKindX on InventoryItemKind {
   String get key => switch (this) {
-        InventoryItemKind.service => 'service',
-        InventoryItemKind.insumo => 'insumo',
-        InventoryItemKind.articulo => 'articulo',
-      };
+    InventoryItemKind.service => 'service',
+    InventoryItemKind.insumo => 'insumo',
+    InventoryItemKind.articulo => 'articulo',
+  };
 
   String get label => switch (this) {
-        InventoryItemKind.service => 'Servicio',
-        InventoryItemKind.insumo => 'Insumo',
-        InventoryItemKind.articulo => 'Artículo',
-      };
+    InventoryItemKind.service => 'Servicio',
+    InventoryItemKind.insumo => 'Insumo',
+    InventoryItemKind.articulo => 'Artículo',
+  };
 
   static InventoryItemKind fromKey(String? v) {
     switch ((v ?? '').toLowerCase()) {

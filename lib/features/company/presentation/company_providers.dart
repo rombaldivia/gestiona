@@ -6,4 +6,6 @@ import 'company_state.dart';
 /// Empresa activa del usuario autenticado.
 /// Lee el uid desde authStateProvider dentro del controller.
 final companyControllerProvider =
-    AsyncNotifierProvider<CompanyController, CompanyState>(CompanyController.new);
+    AsyncNotifierProvider<CompanyController, CompanyState>(
+      CompanyController.new,
+    );

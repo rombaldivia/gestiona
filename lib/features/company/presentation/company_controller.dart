@@ -25,7 +25,7 @@ class CompanyController extends AsyncNotifier<CompanyState> {
   Future<CompanyState> build() async {
     // Depende del usuario autenticado.
     // Cuando cambie el auth state, este provider se reconstruye.
-    final user = ref.watch(authStateProvider).value;
+    final user = await ref.watch(authStateProvider.future);
 
     if (user == null) {
       _uid = null;
@@ -46,7 +46,11 @@ class CompanyController extends AsyncNotifier<CompanyState> {
       final legacyName = prefs.getString(_legacyNameKey(_uid!));
 
       if (legacyId != null && legacyName != null) {
-        await _local.setActiveCompany(uid: _uid!, id: legacyId, name: legacyName);
+        await _local.setActiveCompany(
+          uid: _uid!,
+          id: legacyId,
+          name: legacyName,
+        );
         _startCloudListener(_uid!);
         return CompanyState(companyId: legacyId, companyName: legacyName);
       }
@@ -68,8 +72,8 @@ class CompanyController extends AsyncNotifier<CompanyState> {
         .doc(uid)
         .snapshots()
         .listen((snap) {
-      _handleCloudSnap(uid, snap);
-    });
+          _handleCloudSnap(uid, snap);
+        });
 
     ref.onDispose(() {
       _sub?.cancel();

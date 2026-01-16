@@ -7,9 +7,9 @@ class Entitlements {
 
   factory Entitlements.forTier(PlanTier tier) => Entitlements._(tier);
 
-  // Feature gates
-  bool get cloudSync => tier != PlanTier.free;
-  bool get multiCompany => tier != PlanTier.free; // Free: 1 empresa
+  // Feature gates (solo FREE/PRO)
+  bool get cloudSync => tier == PlanTier.pro;
+  bool get multiCompany => tier == PlanTier.pro; // Free: 1 empresa
   bool get rolesAndTeams => tier == PlanTier.pro;
 
   bool get whatsappIntegration => tier == PlanTier.pro;
@@ -18,13 +18,11 @@ class Entitlements {
   // Límites
   int get maxCompanies => switch (tier) {
     PlanTier.free => 1,
-    PlanTier.plus => 3,
     PlanTier.pro => 999999,
   };
 
   int get maxTeamMembers => switch (tier) {
     PlanTier.free => 1,
-    PlanTier.plus => 3,
     PlanTier.pro => 999999,
   };
 }
