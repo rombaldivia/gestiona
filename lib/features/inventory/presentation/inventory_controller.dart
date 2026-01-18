@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
@@ -12,12 +14,14 @@ import 'inventory_state.dart';
 class InventoryController extends AsyncNotifier<InventoryState> {
   final _service = InventoryOfflineFirstService();
   String? _companyId;
+  StreamSubscription<List<InventoryItem>>? _cloudSub;
 
   @override
   Future<InventoryState> build() async {
     final user = await ref.watch(authStateProvider.future);
     if (user == null) {
       _companyId = null;
+      _cloudSub?.cancel();
       return const InventoryState(items: []);
     }
 
@@ -25,12 +29,40 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     final cid = company.companyId;
     if (cid == null) {
       _companyId = null;
+      _cloudSub?.cancel();
       return const InventoryState(items: []);
     }
     _companyId = cid;
 
+    final ent = await ref.watch(entitlementsProvider(user).future);
+
+    // ✅ IMPORTACIÓN AUTOMÁTICA AL INICIAR (y cada cambio remoto)
+    if (ent.cloudSync) {
+      _cloudSub?.cancel();
+      _cloudSub = _service.watchCloudItems(companyId: cid).listen((
+        cloudItems,
+      ) async {
+        await _service.applyCloudToLocal(
+          companyId: cid,
+          cloudItems: cloudItems,
+        );
+        final local = await _service.listItems(companyId: cid);
+        final q = state.asData?.value.query ?? '';
+        state = AsyncData(InventoryState(items: local, query: q));
+      });
+      ref.onDispose(() => _cloudSub?.cancel());
+    } else {
+      _cloudSub?.cancel();
+    }
+
     final items = await _service.listItems(companyId: cid);
     return InventoryState(items: items);
+  }
+
+  void _ensureCompany() {
+    if (_companyId == null) {
+      throw StateError('No hay empresa activa seleccionada.');
+    }
   }
 
   void setQuery(String q) {
@@ -44,21 +76,10 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     await future;
   }
 
-  void _ensureCompany() {
-    if (_companyId == null) {
-      throw StateError('No hay empresa activa seleccionada.');
-    }
-  }
-
   Future<Entitlements> _getFreshEntitlements() async {
     final user = await ref.read(authStateProvider.future);
-    if (user == null) {
-      throw StateError('No hay usuario autenticado.');
-    }
-    final ent = await ref.read(entitlementsProvider(user).future);
-    // ignore: avoid_print
-    print('🧾 controller fresh ent: uid= tier= cloudSync=');
-    return ent;
+    if (user == null) throw StateError('No hay usuario autenticado.');
+    return ref.read(entitlementsProvider(user).future);
   }
 
   Future<void> upsertItem({
@@ -101,7 +122,6 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     _ensureCompany();
     final freshEnt = await _getFreshEntitlements();
 
-    // ✅ Tu modelo usa qty (positiva), createdAtMs (epoch ms) y requiere id
     final movement = StockMovement(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       itemId: itemId,
@@ -122,16 +142,11 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     await reload();
   }
 
-  Future<int> sync({
-    required Entitlements ent, // compat UI
-  }) async {
+  Future<int> sync({required Entitlements ent}) async {
     _ensureCompany();
     final freshEnt = await _getFreshEntitlements();
-
-    // ignore: avoid_print
-    print(
-      '🔄 controller sync requested: companyId=$_companyId tier=${freshEnt.tier} cloudSync=${freshEnt.cloudSync}',
-    );
-    return 0;
+    final n = await _service.syncPending(companyId: _companyId!, ent: freshEnt);
+    await reload();
+    return n;
   }
 }

@@ -15,26 +15,23 @@ class InventoryCloudService {
   CollectionReference<Map<String, dynamic>> _movesCol(String companyId) =>
       _db.collection('companies').doc(companyId).collection('stock_movements');
 
+  Stream<List<InventoryItem>> watchItems(String companyId) {
+    return _itemsCol(companyId).snapshots().map(
+      (qs) => qs.docs
+          .map((d) => InventoryItem.fromJson({...d.data(), 'id': d.id}))
+          .toList(),
+    );
+  }
+
   Future<void> upsertItem({
     required String companyId,
     required String uid,
     required InventoryItem item,
   }) async {
     await _itemsCol(companyId).doc(item.id).set({
-      'id': item.id,
-      'name': item.name,
-      'sku': item.sku,
-      'unit': item.unit,
-      'salePrice': item.salePrice,
-      'cost': item.cost,
-      'stock': item.stock,
-      'minStock': item.minStock,
-      'updatedAtMs': item.updatedAtMs,
+      ...item.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
       'updatedBy': uid,
-      'kind': item.kind.key,
-      'pricingMode': item.pricingMode,
-      'calcMargin': item.calcMargin,
     }, SetOptions(merge: true));
   }
 
@@ -51,14 +48,7 @@ class InventoryCloudService {
     required StockMovement m,
   }) async {
     await _movesCol(companyId).doc(m.id).set({
-      'id': m.id,
-      'itemId': m.itemId,
-      'type': m.type.name,
-      'qty': m.qty,
-      'note': m.note,
-      'refType': m.refType,
-      'refId': m.refId,
-      'createdAtMs': m.createdAtMs,
+      ...m.toJson(),
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': uid,
     }, SetOptions(merge: true));

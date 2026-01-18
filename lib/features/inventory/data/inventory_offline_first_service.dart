@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../subscription/domain/entitlements.dart';
@@ -20,15 +22,45 @@ class InventoryOfflineFirstService {
   final InventoryCloudService _cloud;
 
   Future<List<InventoryItem>> listItems({required String companyId}) async {
-    final user = _auth.currentUser;
-    if (user == null) return [];
-    return _local.listItems(uid: user.uid, companyId: companyId);
+    final u = _auth.currentUser;
+    if (u == null) return [];
+    return _local.listItems(uid: u.uid, companyId: companyId);
   }
 
   Future<List<StockMovement>> listMovements({required String companyId}) async {
-    final user = _auth.currentUser;
-    if (user == null) return [];
-    return _local.listMovements(uid: user.uid, companyId: companyId);
+    final u = _auth.currentUser;
+    if (u == null) return [];
+    return _local.listMovements(uid: u.uid, companyId: companyId);
+  }
+
+  Stream<List<InventoryItem>> watchCloudItems({required String companyId}) {
+    return _cloud.watchItems(companyId);
+  }
+
+  /// Aplica cloud -> local (no pisa items locales "dirty")
+  Future<void> applyCloudToLocal({
+    required String companyId,
+    required List<InventoryItem> cloudItems,
+  }) async {
+    final u = _auth.currentUser;
+    if (u == null) return;
+    final uid = u.uid;
+
+    final local = await _local.listItems(uid: uid, companyId: companyId);
+    final map = {for (final it in local) it.id: it};
+
+    for (final cloud in cloudItems) {
+      final existing = map[cloud.id];
+      if (existing == null || !existing.dirty) {
+        map[cloud.id] = cloud.copyWith(dirty: false);
+      }
+    }
+
+    await _local.saveItems(
+      uid: uid,
+      companyId: companyId,
+      items: map.values.toList(),
+    );
   }
 
   Future<void> upsertItemOfflineFirst({
@@ -36,19 +68,12 @@ class InventoryOfflineFirstService {
     required InventoryItem item,
     required Entitlements ent,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) throw StateError('No hay usuario autenticado.');
-    final uid = user.uid;
-
-    // 🔎 LOG CLAVE
-    // ignore: avoid_print
-    print(
-      '🧩 upsertItemOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
-    );
+    final u = _auth.currentUser;
+    if (u == null) throw StateError('No hay usuario autenticado.');
+    final uid = u.uid;
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == item.id);
-
     final dirtyItem = item.copyWith(dirty: true);
 
     if (idx >= 0) {
@@ -59,23 +84,10 @@ class InventoryOfflineFirstService {
 
     await _local.saveItems(uid: uid, companyId: companyId, items: items);
 
-    if (!ent.cloudSync) {
-      // ignore: avoid_print
-      print('⛔ cloudSync=false, NO se sube a Firestore (plan FREE).');
-      return;
-    }
+    if (!ent.cloudSync) return;
 
-    try {
-      await _cloud.upsertItem(companyId: companyId, uid: uid, item: dirtyItem);
-      await _markItemClean(companyId: companyId, itemId: dirtyItem.id);
-      // ignore: avoid_print
-      print('✅ Item subido a Firestore OK');
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('🔥 Inventory sync error (upsert): $e');
-      // ignore: avoid_print
-      print(st);
-    }
+    await _cloud.upsertItem(companyId: companyId, uid: uid, item: dirtyItem);
+    await _markItemClean(companyId: companyId, itemId: dirtyItem.id);
   }
 
   Future<void> deleteItemOfflineFirst({
@@ -83,24 +95,16 @@ class InventoryOfflineFirstService {
     required String itemId,
     required Entitlements ent,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) throw StateError('No hay usuario autenticado.');
-    final uid = user.uid;
+    final u = _auth.currentUser;
+    if (u == null) throw StateError('No hay usuario autenticado.');
+    final uid = u.uid;
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     items.removeWhere((e) => e.id == itemId);
     await _local.saveItems(uid: uid, companyId: companyId, items: items);
 
     if (!ent.cloudSync) return;
-
-    try {
-      await _cloud.deleteItem(companyId: companyId, itemId: itemId);
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('🔥 Inventory sync error (delete): $e');
-      // ignore: avoid_print
-      print(st);
-    }
+    await _cloud.deleteItem(companyId: companyId, itemId: itemId);
   }
 
   Future<void> adjustStockOfflineFirst({
@@ -110,14 +114,9 @@ class InventoryOfflineFirstService {
     required StockMovement movement,
     required Entitlements ent,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) throw StateError('No hay usuario autenticado.');
-    final uid = user.uid;
-
-    // ignore: avoid_print
-    print(
-      '🧩 adjustStockOfflineFirst uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
-    );
+    final u = _auth.currentUser;
+    if (u == null) throw StateError('No hay usuario autenticado.');
+    final uid = u.uid;
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == itemId);
@@ -147,19 +146,10 @@ class InventoryOfflineFirstService {
 
     if (!ent.cloudSync) return;
 
-    try {
-      await _cloud.upsertItem(companyId: companyId, uid: uid, item: updated);
-      await _cloud.addMovement(companyId: companyId, uid: uid, m: movement);
-      await _markItemClean(companyId: companyId, itemId: itemId);
-      await _markMovementClean(companyId: companyId, movementId: movement.id);
-      // ignore: avoid_print
-      print('✅ Stock + movimiento subidos a Firestore OK');
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('🔥 Inventory sync error (adjust): $e');
-      // ignore: avoid_print
-      print(st);
-    }
+    await _cloud.upsertItem(companyId: companyId, uid: uid, item: updated);
+    await _cloud.addMovement(companyId: companyId, uid: uid, m: movement);
+    await _markItemClean(companyId: companyId, itemId: itemId);
+    await _markMovementClean(companyId: companyId, movementId: movement.id);
   }
 
   Future<int> syncPending({
@@ -167,43 +157,24 @@ class InventoryOfflineFirstService {
     required Entitlements ent,
   }) async {
     if (!ent.cloudSync) return 0;
-    final user = _auth.currentUser;
-    if (user == null) return 0;
-    final uid = user.uid;
-
-    // ignore: avoid_print
-    print(
-      '🧩 syncPending uid=$uid companyId=$companyId tier=${ent.tier} cloudSync=${ent.cloudSync}',
-    );
+    final u = _auth.currentUser;
+    if (u == null) return 0;
+    final uid = u.uid;
 
     int synced = 0;
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final moves = await _local.listMovements(uid: uid, companyId: companyId);
 
     for (final it in items.where((e) => e.dirty)) {
-      try {
-        await _cloud.upsertItem(companyId: companyId, uid: uid, item: it);
-        await _markItemClean(companyId: companyId, itemId: it.id);
-        synced++;
-      } catch (e, st) {
-        // ignore: avoid_print
-        print('🔥 Inventory syncPending item error: $e');
-        // ignore: avoid_print
-        print(st);
-      }
+      await _cloud.upsertItem(companyId: companyId, uid: uid, item: it);
+      await _markItemClean(companyId: companyId, itemId: it.id);
+      synced++;
     }
 
     for (final mv in moves.where((e) => e.dirty)) {
-      try {
-        await _cloud.addMovement(companyId: companyId, uid: uid, m: mv);
-        await _markMovementClean(companyId: companyId, movementId: mv.id);
-        synced++;
-      } catch (e, st) {
-        // ignore: avoid_print
-        print('🔥 Inventory syncPending movement error: $e');
-        // ignore: avoid_print
-        print(st);
-      }
+      await _cloud.addMovement(companyId: companyId, uid: uid, m: mv);
+      await _markMovementClean(companyId: companyId, movementId: mv.id);
+      synced++;
     }
 
     return synced;
@@ -213,9 +184,9 @@ class InventoryOfflineFirstService {
     required String companyId,
     required String itemId,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    final uid = user.uid;
+    final u = _auth.currentUser;
+    if (u == null) return;
+    final uid = u.uid;
 
     final items = await _local.listItems(uid: uid, companyId: companyId);
     final idx = items.indexWhere((e) => e.id == itemId);
@@ -229,9 +200,9 @@ class InventoryOfflineFirstService {
     required String companyId,
     required String movementId,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    final uid = user.uid;
+    final u = _auth.currentUser;
+    if (u == null) return;
+    final uid = u.uid;
 
     final moves = await _local.listMovements(uid: uid, companyId: companyId);
     final idx = moves.indexWhere((e) => e.id == movementId);
