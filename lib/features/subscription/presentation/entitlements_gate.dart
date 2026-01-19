@@ -5,61 +5,61 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/entitlements.dart';
 import 'entitlements_providers.dart';
 
+typedef EntitlementsWidgetBuilder = Widget Function(
+  BuildContext context,
+  Entitlements entitlements,
+  Widget child,
+);
+
 class EntitlementsGate extends ConsumerWidget {
-  /// ✅ NUEVO: modo "builder"
   const EntitlementsGate({
     super.key,
-    required this.builder,
-    this.loading,
-    this.user, // compat (no se usa si builder está)
-    this.child, // compat (no se usa si builder está)
+    this.user,
+    this.builder,
+    required this.child,
   });
 
-  /// (Compat) antes quizá se pasaba el User, pero ahora se usa uid internamente.
-  final User? user;
-
-  /// (Compat) antes quizá se pasaba child directo.
-  final Widget? child;
-
-  /// ✅ NUEVO recomendado
-  final Widget Function(BuildContext context, Entitlements entitlements) builder;
-
-  final Widget? loading;
-
-  /// ✅ Constructor compat: permite EntitlementsGate(user: ..., child: ...)
+  /// Si alguna vez quieres forzar builder (como tu versión anterior),
+  /// usa esta factory.
   factory EntitlementsGate.compat({
     Key? key,
-    required User user,
+    User? user,
     required Widget child,
-    Widget? loading,
+    required EntitlementsWidgetBuilder builder,
   }) {
     return EntitlementsGate(
       key: key,
       user: user,
+      builder: builder,
       child: child,
-      loading: loading,
-      builder: (context, entitlements) => child,
     );
   }
 
+  final User? user;
+  final Widget child;
+  final EntitlementsWidgetBuilder? builder;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Si nos pasaron user explícito, lo usamos; si no, usamos el currentUser
     final u = user ?? FirebaseAuth.instance.currentUser;
-    final uid = u?.uid;
+    if (u == null) return child;
 
-    if (uid == null) {
-      return loading ??
-          const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    final entAsync = ref.watch(entitlementsProvider(u.uid));
+
+    // Si no hay builder, solo “toca” el provider y devuelve el child.
+    final b = builder;
+    if (b == null) {
+      return entAsync.when(
+        data: (_) => child,
+        loading: () => child,
+        error: (err, st) => child,
+      );
     }
 
-    final entAsync = ref.watch(entitlementsProvider(uid));
     return entAsync.when(
-      data: (e) => builder(context, e),
-      loading: () =>
-          loading ?? const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (err, st) =>
-          loading ?? const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      data: (e) => b(context, e, child),
+      loading: () => child,
+      error: (err, st) => child,
     );
   }
 }
