@@ -2,9 +2,10 @@ name: build
 
 on:
   pull_request:
+    branches: [ "main" ]
   push:
     branches:
-      - fix/**
+      - "fix/**"
 
 jobs:
   build:
