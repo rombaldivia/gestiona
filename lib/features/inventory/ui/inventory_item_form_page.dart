@@ -1,103 +1,50 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../subscription/domain/plan_tier.dart';
+import '../../subscription/presentation/entitlements_providers.dart';
 import '../domain/inventory_item.dart';
 
-class InventoryItemFormPage extends StatefulWidget {
+class InventoryItemFormPage extends ConsumerStatefulWidget {
   const InventoryItemFormPage({super.key, this.initial});
-
   final InventoryItem? initial;
 
   @override
-  State<InventoryItemFormPage> createState() => _InventoryItemFormPageState();
+  ConsumerState<InventoryItemFormPage> createState() => _InventoryItemFormPageState();
 }
 
-class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
+class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
   final _name = TextEditingController();
   final _sku = TextEditingController();
   final _unit = TextEditingController();
-
-  // Reutilizamos salePrice como "precio" según tipo
-  final _price = TextEditingController(); // venta / uso / tarifa
+  final _price = TextEditingController();
   final _cost = TextEditingController();
-
-  final _markup = TextEditingController(); // % margen (solo si calcMargin ON)
   final _min = TextEditingController();
 
+  late InventoryItemKind _kind;
+
   bool _useSku = false;
-
-  InventoryItemKind _kind = InventoryItemKind.articulo;
-
-  // Servicio: fixed vs hourly
+  bool _calcMargin = false;
   bool _serviceHourly = false;
 
-  // Insumo/Artículo: activar cálculo de margen
-  bool _calcMargin = false;
+  // valores calculados para mostrar (no se guardan)
+  double? _profitMoney;   // Bs
+  double? _markupPct;     // %
+  double? _marginPct;     // %
 
-  bool _updating = false;
+  bool get _isService => _kind == InventoryItemKind.service;
+  bool get _supportsStock => !_isService;
+  bool get _supportsMargin => !_isService;
 
-  @override
-  void initState() {
-    super.initState();
-
-    final it = widget.initial;
-    if (it != null) {
-      _kind = it.kind;
-
-      _name.text = it.name;
-      _sku.text = it.sku ?? '';
-      _useSku = (it.sku != null && it.sku!.trim().isNotEmpty);
-
-      _unit.text = it.unit ?? '';
-
-      _price.text = it.salePrice?.toString() ?? '';
-      _cost.text = it.cost?.toString() ?? '';
-      _min.text = it.minStock?.toString() ?? '';
-
-      _calcMargin = it.calcMargin;
-
-      _serviceHourly = (it.pricingMode ?? '') == 'hourly';
-
-      // Si calcMargin ON y tenemos costo+precio, precargamos % margen
-      final c = it.cost;
-      final p = it.salePrice;
-      if (_calcMargin && c != null && c > 0 && p != null) {
-        final pct = ((p - c) / c) * 100.0;
-        _markup.text = _fmtPct(pct);
-      }
-    }
-
-    _cost.addListener(_onCostChanged);
-    _price.addListener(_onPriceChanged);
-    _markup.addListener(_onMarkupChanged);
-  }
-
-  @override
-  void dispose() {
-    _cost.removeListener(_onCostChanged);
-    _price.removeListener(_onPriceChanged);
-    _markup.removeListener(_onMarkupChanged);
-
-    _name.dispose();
-    _sku.dispose();
-    _unit.dispose();
-    _price.dispose();
-    _cost.dispose();
-    _markup.dispose();
-    _min.dispose();
-    super.dispose();
-  }
+  String get _priceLabel => _isService
+      ? (_serviceHourly ? 'Tarifa por hora' : 'Precio del servicio')
+      : 'Precio de venta';
 
   double? _parseDouble(TextEditingController c) {
-    final t = c.text.trim();
+    final t = c.text.trim().replaceAll(',', '.');
     if (t.isEmpty) return null;
-    return double.tryParse(t.replaceAll(',', '.'));
-  }
-
-  void _setTextSilently(TextEditingController c, String v) {
-    _updating = true;
-    c.text = v;
-    c.selection = TextSelection.collapsed(offset: c.text.length);
-    _updating = false;
+    return double.tryParse(t);
   }
 
   String _fmtMoney(double v) {
@@ -105,113 +52,147 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     return v.toStringAsFixed(2);
   }
 
-  String _fmtPct(double v) {
-    if (v.isNaN || v.isInfinite) return '';
-    return v.toStringAsFixed(2);
-  }
+  String _fmtPct(double v) => v.toStringAsFixed(2);
 
-  bool get _supportsStock =>
-      _kind == InventoryItemKind.insumo || _kind == InventoryItemKind.articulo;
-
-  bool get _supportsMargin =>
-      _kind == InventoryItemKind.insumo || _kind == InventoryItemKind.articulo;
-
-  String get _priceLabel {
-    return switch (_kind) {
-      InventoryItemKind.articulo => 'Precio de venta',
-      InventoryItemKind.insumo => 'Precio por uso (opcional)',
-      InventoryItemKind.service =>
-        _serviceHourly ? 'Tarifa por hora' : 'Precio fijo',
-    };
-  }
-
-  void _onCostChanged() {
-    if (_updating) return;
-    if (!_supportsMargin) return;
-    if (!_calcMargin) return;
-
-    final cost = _parseDouble(_cost);
-    if (cost == null || cost <= 0) return;
-
-    final markup = _parseDouble(_markup);
-    final price = _parseDouble(_price);
-
-    if (markup != null) {
-      final newPrice = cost * (1.0 + markup / 100.0);
-      _setTextSilently(_price, _fmtMoney(newPrice));
+  void _recalcMargins() {
+    if (!_calcMargin || !_supportsMargin) {
+      setState(() {
+        _profitMoney = null;
+        _markupPct = null;
+        _marginPct = null;
+      });
       return;
     }
 
-    if (price != null) {
-      final pct = ((price - cost) / cost) * 100.0;
-      _setTextSilently(_markup, _fmtPct(pct));
+    final price = _parseDouble(_price);
+    final cost = _parseDouble(_cost);
+
+    if (price == null || cost == null || price <= 0 || cost < 0) {
+      setState(() {
+        _profitMoney = null;
+        _markupPct = null;
+        _marginPct = null;
+      });
       return;
     }
-  }
 
-  void _onMarkupChanged() {
-    if (_updating) return;
-    if (!_supportsMargin) return;
-    if (!_calcMargin) return;
+    final profit = price - cost;
 
-    final cost = _parseDouble(_cost);
-    final markup = _parseDouble(_markup);
-    if (cost == null || cost <= 0) return;
-    if (markup == null) return;
+    double? markup;
+    if (cost > 0) markup = (profit / cost) * 100.0;
 
-    final newPrice = cost * (1.0 + markup / 100.0);
-    _setTextSilently(_price, _fmtMoney(newPrice));
-  }
+    final margin = (profit / price) * 100.0;
 
-  void _onPriceChanged() {
-    if (_updating) return;
-    if (!_supportsMargin) return;
-    if (!_calcMargin) return;
-
-    final cost = _parseDouble(_cost);
-    final price = _parseDouble(_price);
-    if (cost == null || cost <= 0) return;
-    if (price == null) return;
-
-    final pct = ((price - cost) / cost) * 100.0;
-    _setTextSilently(_markup, _fmtPct(pct));
-  }
-
-  void _setKind(InventoryItemKind k) {
     setState(() {
-      _kind = k;
+      _profitMoney = profit;
+      _markupPct = markup;
+      _marginPct = margin;
+    });
+  }
 
-      // Ajustes suaves al cambiar tipo (sin romper)
-      if (_kind == InventoryItemKind.service) {
+  bool _proCloudFrom(AsyncValue<dynamic> entAsync) {
+    final ent = entAsync.asData?.value;
+    if (ent == null) return false;
+    // ent es Entitlements (dynamic por seguridad acá)
+    try {
+      return ent.tier == PlanTier.pro && ent.cloudSync == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    final item = widget.initial;
+    _kind = item?.kind ?? InventoryItemKind.articulo;
+
+    if (item != null) {
+      _name.text = item.name;
+      _unit.text = item.unit ?? '';
+      _price.text = item.salePrice.toString();
+      _cost.text = item.cost?.toString() ?? '';
+      _min.text = item.minStock?.toString() ?? '';
+      _sku.text = item.sku ?? '';
+      _useSku = (item.sku ?? '').isNotEmpty;
+      _calcMargin = item.calcMargin;
+      _serviceHourly = (item.pricingMode ?? '') == 'hourly';
+    }
+
+    _price.addListener(_recalcMargins);
+    _cost.addListener(_recalcMargins);
+
+    // primer cálculo (si venía activado)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recalcMargins());
+  }
+
+  @override
+  void dispose() {
+    _price.removeListener(_recalcMargins);
+    _cost.removeListener(_recalcMargins);
+
+    _name.dispose();
+    _sku.dispose();
+    _unit.dispose();
+    _price.dispose();
+    _cost.dispose();
+    _min.dispose();
+    super.dispose();
+  }
+
+  void _onKindChanged(InventoryItemKind v) {
+    setState(() {
+      _kind = v;
+      if (_isService) {
         _unit.clear();
         _min.clear();
+        _cost.clear();
+        _useSku = false;
+        _sku.clear();
         _calcMargin = false;
-        _markup.clear();
       } else {
-        // Insumo/Artículo
-        // El servicio por hora ya no aplica
         _serviceHourly = false;
       }
     });
+    _recalcMargins();
   }
 
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Nombre requerido.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nombre requerido.')),
+      );
       return;
     }
+
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+
+    // En callbacks usa ref.read (no watch)
+    final proCloud = (uid == null)
+        ? false
+        : _proCloudFrom(ref.read(entitlementsProvider(uid)));
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final id = widget.initial?.id ?? 'p_$now';
 
     final skuText = _sku.text.trim();
-    final sku = (_useSku && skuText.isNotEmpty) ? skuText : null;
+    final sku = (proCloud && _useSku && skuText.isNotEmpty) ? skuText : null;
 
     final cost = _parseDouble(_cost);
-    final price = _parseDouble(_price);
+    final price = _parseDouble(_price) ?? 0.0;
+
+    // Si calcMargin está ON, exigimos costo válido para poder calcular
+    if (!_isService && proCloud && _calcMargin) {
+      if (cost == null || cost <= 0 || price <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Para calcular margen, ingresa Costo y Precio válidos.')),
+        );
+        return;
+      }
+    }
 
     final item = InventoryItem(
       id: id,
@@ -219,18 +200,14 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
       sku: sku,
       unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
       salePrice: price,
-      cost: cost,
-      stock: _kind == InventoryItemKind.service
-          ? 0
-          : (widget.initial?.stock ?? 0),
+      cost: _supportsStock ? cost : null,
+      stock: _isService ? 0 : (widget.initial?.stock ?? 0),
       minStock: _supportsStock ? _parseDouble(_min) : null,
       updatedAtMs: now,
       dirty: true,
       kind: _kind,
-      pricingMode: _kind == InventoryItemKind.service
-          ? (_serviceHourly ? 'hourly' : 'fixed')
-          : null,
-      calcMargin: _supportsMargin ? _calcMargin : false,
+      pricingMode: _isService ? (_serviceHourly ? 'hourly' : 'fixed') : null,
+      calcMargin: (proCloud && _supportsMargin) ? _calcMargin : false,
     );
 
     Navigator.pop(context, item);
@@ -239,16 +216,35 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.initial != null;
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+
+    final entAsync = (uid == null) ? null : ref.watch(entitlementsProvider(uid));
+    final proCloud = (entAsync == null) ? false : _proCloudFrom(entAsync);
+
+    // Si deja de ser proCloud, apagamos calcMargin y SKU
+    if (!proCloud && (_calcMargin || _useSku)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _calcMargin = false;
+          _useSku = false;
+          _sku.clear();
+        });
+        _recalcMargins();
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
-        actions: [TextButton(onPressed: _save, child: const Text('Guardar'))],
+        actions: [
+          TextButton(onPressed: _save, child: const Text('Guardar')),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Tipo
           InputDecorator(
             decoration: const InputDecoration(
               labelText: 'Tipo',
@@ -259,43 +255,37 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                 value: _kind,
                 isExpanded: true,
                 items: InventoryItemKind.values
-                    .map(
-                      (k) => DropdownMenuItem(value: k, child: Text(k.label)),
-                    )
+                    .map((k) => DropdownMenuItem(
+                          value: k,
+                          child: Text(k.label),
+                        ))
                     .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  _setKind(v);
-                },
+                onChanged: (v) => v == null ? null : _onKindChanged(v),
               ),
             ),
           ),
-
           const SizedBox(height: 12),
 
           TextField(
             controller: _name,
             decoration: const InputDecoration(
               labelText: 'Nombre',
-              hintText: 'Ej: Impresión / Vinil / Resma A4 75g',
+              hintText: 'Ej: Papel A4 75g',
             ),
-            textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
 
-          // SKU toggle + field
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'SKU',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
+          // SKU PRO+Cloud
+          if (_supportsStock) ...[
+            if (proCloud) ...[
               Row(
                 children: [
-                  const Text('Usar SKU'),
-                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'SKU (PRO + Cloud Sync)',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
                   Switch(
                     value: _useSku,
                     onChanged: (v) {
@@ -305,161 +295,165 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                   ),
                 ],
               ),
-            ],
-          ),
-          if (_useSku) ...[
-            TextField(
-              controller: _sku,
-              decoration: const InputDecoration(
-                labelText: 'SKU del ítem',
-                hintText: 'Ej: PAP-A4-75',
+              if (_useSku) ...[
+                TextField(
+                  controller: _sku,
+                  decoration: const InputDecoration(
+                    labelText: 'SKU del ítem',
+                    hintText: 'Ej: INS-001',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                Text(
+                  'Opcional. Actívalo si quieres un código interno.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+              ],
+            ] else ...[
+              Text(
+                'SKU (PRO + Cloud Sync)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-          ] else ...[
-            Text(
-              'Opcional. Actívalo si quieres usar un código interno.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 6),
+              Text(
+                'Disponible solo en Plan PRO con Cloud Sync activo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ],
           ],
 
-          // Unidad (solo Insumo/Artículo)
           if (_supportsStock) ...[
             TextField(
               controller: _unit,
               decoration: const InputDecoration(
                 labelText: 'Unidad (opcional)',
-                hintText: 'u, kg, m, resma, ml...',
+                hintText: 'u, kg, m...',
               ),
             ),
             const SizedBox(height: 12),
           ],
 
-          // Servicio: por hora o fijo
-          if (_kind == InventoryItemKind.service) ...[
+          if (_isService) ...[
             Row(
               children: [
-                const Expanded(
-                  child: Text(
-                    'Cobro',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Row(
-                  children: [
-                    const Text('Cobrar por hora'),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: _serviceHourly,
-                      onChanged: (v) => setState(() => _serviceHourly = v),
-                    ),
-                  ],
+                const Expanded(child: Text('Cobro', style: TextStyle(fontWeight: FontWeight.w700))),
+                const Text('Por hora'),
+                const SizedBox(width: 8),
+                Switch(
+                  value: _serviceHourly,
+                  onChanged: (v) => setState(() => _serviceHourly = v),
                 ),
               ],
             ),
             const SizedBox(height: 8),
           ],
 
-          // Precio / Costo / Margen
           TextField(
             controller: _price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: _priceLabel,
-              hintText: 'Ej: 50',
-            ),
+            decoration: InputDecoration(labelText: _priceLabel),
           ),
           const SizedBox(height: 12),
 
-          if (_kind != InventoryItemKind.service) ...[
+          // Costo + Márgenes (solo para no-service)
+          if (!_isService) ...[
             TextField(
               controller: _cost,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Costo'),
+            ),
+            const SizedBox(height: 12),
+
+            // Switch Calcular margen (PRO+Cloud)
+            if (proCloud) ...[
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Calcular margen',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Switch(
+                    value: _calcMargin,
+                    onChanged: (v) {
+                      setState(() => _calcMargin = v);
+                      _recalcMargins();
+                    },
+                  ),
+                ],
               ),
-              decoration: const InputDecoration(
-                labelText: 'Costo (opcional)',
-                hintText: 'Ej: 35',
+
+              if (_calcMargin) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Márgenes calculados',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      _profitMoney == null
+                          ? Text(
+                              'Ingresa Costo y Precio para ver el cálculo.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Ganancia: Bs ${_fmtMoney(_profitMoney!)}'),
+                                const SizedBox(height: 4),
+                                Text(_markupPct == null
+                                    ? 'Markup (sobre costo): —'
+                                    : 'Markup (sobre costo): ${_fmtPct(_markupPct!)}%'),
+                                const SizedBox(height: 4),
+                                Text('Margen (sobre precio): ${_fmtPct(_marginPct!)}%'),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ] else ...[
+              Text(
+                'Calcular margen (PRO + Cloud Sync)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
+              const SizedBox(height: 6),
+              Text(
+                'Disponible solo en Plan PRO con Cloud Sync activo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
+
+          // Stock mínimo (si aplica)
+          if (_supportsStock) ...[
+            TextField(
+              controller: _min,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Stock mínimo (opcional)'),
             ),
             const SizedBox(height: 12),
           ],
 
-          // Check calcular margen (Insumo/Artículo)
-          if (_supportsMargin) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Margen',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Row(
-                  children: [
-                    const Text('Calcular margen'),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: _calcMargin,
-                      onChanged: (v) {
-                        setState(() => _calcMargin = v);
-                        if (!v) _markup.clear();
-                        // si lo prende y ya hay costo+precio, calcula %
-                        if (v) {
-                          _onPriceChanged();
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            if (_calcMargin) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _markup,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: '% margen',
-                  suffixText: '%',
-                  hintText: 'Ej: 30',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Tip: llena “Costo + %” o “Costo + Precio”. El otro se ajusta solo.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              const SizedBox(height: 12),
-            ],
-          ],
-
-          // Stock mínimo (solo Insumo/Artículo)
-          if (_supportsStock) ...[
-            TextField(
-              controller: _min,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Stock mínimo (alerta)',
-                hintText: 'Ej: 5',
-              ),
-            ),
-            if (editing) ...[
-              const SizedBox(height: 18),
-              Text(
-                'Stock actual: ${widget.initial!.stock} ${widget.initial!.unit ?? ''}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ],
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('Guardar'),
+          ),
         ],
       ),
     );

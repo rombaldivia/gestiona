@@ -11,27 +11,28 @@ final entitlementsRepositoryProvider = Provider<EntitlementsRepository>((ref) {
   return EntitlementsRepository();
 });
 
-final entitlementsProvider = StreamProvider.family<Entitlements, User>((
-  ref,
-  user,
-) {
+// Provider por UID (String)
+final entitlementsProvider = StreamProvider.family<Entitlements, String>((ref, uid) {
   const forcePro = bool.fromEnvironment('FORCE_PRO', defaultValue: false);
 
   if (forcePro) {
     final e = Entitlements.forTier(PlanTier.pro);
     debugPrint(
-      '✅ entitlementsProvider FORCE_PRO=$forcePro uid=${user.uid} tier=${e.tier} cloudSync=${e.cloudSync}',
+      '✅ entitlementsProvider FORCE_PRO=$forcePro uid=$uid tier=${e.tier} cloudSync=${e.cloudSync}',
     );
     return Stream.value(e);
   }
 
-  // Fire-and-forget: garantiza doc base sin bloquear UI.
-  UserBootstrapper.ensureUserDoc(user);
+  // Fire-and-forget: si el user actual coincide con uid, asegura doc base
+  final u = FirebaseAuth.instance.currentUser;
+  if (u != null && u.uid == uid) {
+    UserBootstrapper.ensureUserDoc(u);
+  }
 
   final repo = ref.watch(entitlementsRepositoryProvider);
-  return repo.watchFor(user).map((e) {
+  return repo.watchUid(uid).map((e) {
     debugPrint(
-      'ℹ️ entitlementsProvider FORCE_PRO=$forcePro uid=${user.uid} tier=${e.tier} cloudSync=${e.cloudSync}',
+      'ℹ️ entitlementsProvider FORCE_PRO=$forcePro uid=$uid tier=${e.tier} cloudSync=${e.cloudSync}',
     );
     return e;
   });
