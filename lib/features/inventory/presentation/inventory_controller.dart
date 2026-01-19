@@ -21,7 +21,8 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     final user = await ref.watch(authStateProvider.future);
     if (user == null) {
       _companyId = null;
-      _cloudSub?.cancel();
+      await _cloudSub?.cancel();
+      _cloudSub = null;
       return const InventoryState(items: []);
     }
 
@@ -29,30 +30,35 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     final cid = company.companyId;
     if (cid == null) {
       _companyId = null;
-      _cloudSub?.cancel();
+      await _cloudSub?.cancel();
+      _cloudSub = null;
       return const InventoryState(items: []);
     }
     _companyId = cid;
 
-    final ent = await ref.watch(entitlementsProvider(user).future);
+    final ent = await ref.watch(entitlementsProvider(user.uid).future);
 
-    // ✅ IMPORTACIÓN AUTOMÁTICA AL INICIAR (y cada cambio remoto)
+    // ✅ Si es PRO (cloudSync), primero hacemos un "pull" inicial (1 vez)
     if (ent.cloudSync) {
-      _cloudSub?.cancel();
-      _cloudSub = _service.watchCloudItems(companyId: cid).listen((
-        cloudItems,
-      ) async {
-        await _service.applyCloudToLocal(
-          companyId: cid,
-          cloudItems: cloudItems,
-        );
+      try {
+        final firstCloud = await _service.watchCloudItems(companyId: cid).first;
+        await _service.applyCloudToLocal(companyId: cid, cloudItems: firstCloud);
+      } catch (_) {
+        // si falla el pull inicial, igual seguimos con local y el stream luego puede recuperar
+      }
+
+      // ✅ luego nos quedamos escuchando cambios de nube (importación automática continua)
+      await _cloudSub?.cancel();
+      _cloudSub = _service.watchCloudItems(companyId: cid).listen((cloudItems) async {
+        await _service.applyCloudToLocal(companyId: cid, cloudItems: cloudItems);
         final local = await _service.listItems(companyId: cid);
         final q = state.asData?.value.query ?? '';
         state = AsyncData(InventoryState(items: local, query: q));
       });
-      ref.onDispose(() => _cloudSub?.cancel());
+      ref.onDispose(() async => _cloudSub?.cancel());
     } else {
-      _cloudSub?.cancel();
+      await _cloudSub?.cancel();
+      _cloudSub = null;
     }
 
     final items = await _service.listItems(companyId: cid);
@@ -79,7 +85,7 @@ class InventoryController extends AsyncNotifier<InventoryState> {
   Future<Entitlements> _getFreshEntitlements() async {
     final user = await ref.read(authStateProvider.future);
     if (user == null) throw StateError('No hay usuario autenticado.');
-    return ref.read(entitlementsProvider(user).future);
+    return ref.read(entitlementsProvider(user.uid).future);
   }
 
   Future<void> upsertItem({

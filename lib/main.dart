@@ -112,9 +112,7 @@ class AuthGate extends ConsumerWidget {
       data: (user) {
         if (user == null) return LoginPage(auth: auth);
 
-        return EntitlementsGate(
-          user: user,
-          child: CompanyGate(auth: auth, user: user),
+        return EntitlementsGate.compat(user: user, child: CompanyGate(auth: auth, user: user),
         );
       },
     );
