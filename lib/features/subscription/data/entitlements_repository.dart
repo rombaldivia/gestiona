@@ -14,7 +14,51 @@ class EntitlementsRepository {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
 
-  /// Watch por UID (más estable para Riverpod family<String>)
+  // Observa entitlements combinando:
+  // - Firestore: users/{uid}.plan
+  // - Claims: token "plan" (si existe)
+  Stream<Entitlements> watchFor(User user) {
+    final controller = StreamController<Entitlements>.broadcast();
+
+    PlanTier? docTier;
+    PlanTier? claimsTier;
+
+    void emit() {
+      final tier = claimsTier ?? docTier ?? PlanTier.free;
+      controller.add(Entitlements.forTier(tier));
+    }
+
+    final docRef = _db.collection('users').doc(user.uid);
+
+    final docSub = docRef.snapshots().listen((snap) {
+      final data = snap.data();
+      docTier = PlanTier.fromString(data?['plan'] as String?);
+      emit();
+    }, onError: controller.addError);
+
+    final tokenSub = _auth.idTokenChanges().listen((u) async {
+      if (u == null) return;
+      claimsTier = await _tierFromClaims(u);
+      emit();
+    }, onError: controller.addError);
+
+    controller.onCancel = () async {
+      await docSub.cancel();
+      await tokenSub.cancel();
+      await controller.close();
+    };
+
+    () async {
+      try {
+        claimsTier = await _tierFromClaims(user);
+      } catch (_) {}
+      emit();
+    }();
+
+    return controller.stream.distinct((a, b) => a.tier == b.tier);
+  }
+
+  // Compat: permite observar solo con uid (usa currentUser internamente).
   Stream<Entitlements> watchUid(String uid) {
     final controller = StreamController<Entitlements>.broadcast();
 
@@ -28,30 +72,16 @@ class EntitlementsRepository {
 
     final docRef = _db.collection('users').doc(uid);
 
-    // 1) Prefetch rápido para no emitir "free" falso al inicio
-    () async {
-      try {
-        final snap = await docRef.get();
-        final data = snap.data();
-        docTier = PlanTier.fromString(data?['plan'] as String?);
-      } catch (_) {}
-      emit();
-    }();
-
-    // 2) Snapshots del doc
     final docSub = docRef.snapshots().listen((snap) {
       final data = snap.data();
       docTier = PlanTier.fromString(data?['plan'] as String?);
       emit();
     }, onError: controller.addError);
 
-    // 3) Claims (si las usas). Si no tienes custom claims, esto quedará null y no molesta.
     final tokenSub = _auth.idTokenChanges().listen((u) async {
       if (u == null) return;
       if (u.uid != uid) return;
-      try {
-        claimsTier = await _tierFromClaims(u);
-      } catch (_) {}
+      claimsTier = await _tierFromClaims(u);
       emit();
     }, onError: controller.addError);
 
@@ -61,12 +91,21 @@ class EntitlementsRepository {
       await controller.close();
     };
 
+    () async {
+      try {
+        final u = _auth.currentUser;
+        if (u != null && u.uid == uid) {
+          claimsTier = await _tierFromClaims(u);
+        }
+      } catch (_) {}
+      emit();
+    }();
+
     return controller.stream.distinct((a, b) => a.tier == b.tier);
   }
 
   Future<PlanTier?> _tierFromClaims(User user) async {
-    // forceRefresh true evita token viejo en algunas situaciones
-    final res = await user.getIdTokenResult(true);
+    final res = await user.getIdTokenResult();
     final claims = res.claims;
     if (claims == null) return null;
 
