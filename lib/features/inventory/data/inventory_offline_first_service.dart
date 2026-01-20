@@ -123,12 +123,12 @@ class InventoryOfflineFirstService {
     if (idx < 0) throw StateError('Item no existe.');
 
     final current = items[idx];
-    if (current.kind == InventoryItemKind.service) {
+    if (current.kind == InventoryItemKind.servicio) {
       throw StateError('Un servicio no maneja stock.');
     }
 
     final updated = current.copyWith(
-      stock: (current.stock + delta),
+      stock: (((current.stock + delta)) as num).toInt(),
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       dirty: true,
     );

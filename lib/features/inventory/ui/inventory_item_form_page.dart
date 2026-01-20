@@ -33,7 +33,7 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
   // NUEVO: protector dólar por ítem (solo insumo/artículo)
   bool _protectDollar = false;
 
-  bool get _isService => _kind == InventoryItemKind.service;
+  bool get _isService => _kind == InventoryItemKind.servicio;
   bool get _supportsStock => !_isService;
   bool get _supportsMargin => !_isService;
   bool get _supportsDollarProtection => !_isService; // solo insumo/artículo (no servicio)
