@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../dollar/data/dollar_repository.dart';
+import '../../dollar/presentation/dollar_providers.dart';
 import '../../subscription/domain/plan_tier.dart';
 import '../../subscription/presentation/entitlements_providers.dart';
 import '../domain/inventory_item.dart';
@@ -18,7 +20,7 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
   final _name = TextEditingController();
   final _sku = TextEditingController();
   final _unit = TextEditingController();
-  final _price = TextEditingController();
+  final _price = TextEditingController(); // precio base
   final _cost = TextEditingController();
   final _min = TextEditingController();
 
@@ -28,18 +30,17 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
   bool _calcMargin = false;
   bool _serviceHourly = false;
 
-  // valores calculados para mostrar (no se guardan)
-  double? _profitMoney;   // Bs
-  double? _markupPct;     // %
-  double? _marginPct;     // %
+  // NUEVO: protector dólar por ítem (solo insumo/artículo)
+  bool _protectDollar = false;
 
   bool get _isService => _kind == InventoryItemKind.service;
   bool get _supportsStock => !_isService;
   bool get _supportsMargin => !_isService;
+  bool get _supportsDollarProtection => !_isService; // solo insumo/artículo (no servicio)
 
   String get _priceLabel => _isService
       ? (_serviceHourly ? 'Tarifa por hora' : 'Precio del servicio')
-      : 'Precio de venta';
+      : 'Precio de venta (base)';
 
   double? _parseDouble(TextEditingController c) {
     final t = c.text.trim().replaceAll(',', '.');
@@ -47,64 +48,20 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
     return double.tryParse(t);
   }
 
-  String _fmtMoney(double v) {
-    if (v == v.roundToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(2);
-  }
-
-  String _fmtPct(double v) => v.toStringAsFixed(2);
-
-  void _recalcMargins() {
-    if (!_calcMargin || !_supportsMargin) {
-      setState(() {
-        _profitMoney = null;
-        _markupPct = null;
-        _marginPct = null;
-      });
-      return;
-    }
-
-    final price = _parseDouble(_price);
-    final cost = _parseDouble(_cost);
-
-    if (price == null || cost == null || price <= 0 || cost < 0) {
-      setState(() {
-        _profitMoney = null;
-        _markupPct = null;
-        _marginPct = null;
-      });
-      return;
-    }
-
-    final profit = price - cost;
-
-    double? markup;
-    if (cost > 0) markup = (profit / cost) * 100.0;
-
-    final margin = (profit / price) * 100.0;
-
-    setState(() {
-      _profitMoney = profit;
-      _markupPct = markup;
-      _marginPct = margin;
-    });
-  }
-
-  bool _proCloudFrom(AsyncValue<dynamic> entAsync) {
-    final ent = entAsync.asData?.value;
-    if (ent == null) return false;
-    // ent es Entitlements (dynamic por seguridad acá)
-    try {
-      return ent.tier == PlanTier.pro && ent.cloudSync == true;
-    } catch (_) {
-      return false;
-    }
+  bool _isProCloud(String? uid) {
+    if (uid == null) return false;
+    final entAsync = ref.watch(entitlementsProvider(uid));
+    final ent = entAsync.asData?.value; // Riverpod 3.1.0
+    if (ent != null) return ent.tier == PlanTier.pro && ent.cloudSync;
+    return entAsync.maybeWhen(
+      data: (e) => e.tier == PlanTier.pro && e.cloudSync,
+      orElse: () => false,
+    );
   }
 
   @override
   void initState() {
     super.initState();
-
     final item = widget.initial;
     _kind = item?.kind ?? InventoryItemKind.articulo;
 
@@ -118,20 +75,14 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
       _useSku = (item.sku ?? '').isNotEmpty;
       _calcMargin = item.calcMargin;
       _serviceHourly = (item.pricingMode ?? '') == 'hourly';
+
+      // NUEVO (por ítem)
+      _protectDollar = item.dollarProtected;
     }
-
-    _price.addListener(_recalcMargins);
-    _cost.addListener(_recalcMargins);
-
-    // primer cálculo (si venía activado)
-    WidgetsBinding.instance.addPostFrameCallback((_) => _recalcMargins());
   }
 
   @override
   void dispose() {
-    _price.removeListener(_recalcMargins);
-    _cost.removeListener(_recalcMargins);
-
     _name.dispose();
     _sku.dispose();
     _unit.dispose();
@@ -151,11 +102,52 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
         _useSku = false;
         _sku.clear();
         _calcMargin = false;
+
+        // Servicio no usa protección dólar
+        _protectDollar = false;
       } else {
         _serviceHourly = false;
       }
     });
-    _recalcMargins();
+  }
+
+  Future<void> _toggleProtectDollar({
+    required bool value,
+    required bool proCloud,
+    required String uid,
+  }) async {
+    if (!proCloud) {
+      setState(() => _protectDollar = false);
+      return;
+    }
+
+    // Si lo activan, aseguramos que exista tasa base en user doc.
+    if (value) {
+      try {
+        final repo = ref.read(dollarRepositoryProvider);
+
+        // si el usuario no tiene base, la crea; si ya tiene, solo refresh.
+        final st = await ref.read(dollarProtectionProvider(uid).future);
+        if (!st.enabled || st.baseRate == null) {
+          await repo.enableAndSetBase(uid);
+        } else {
+          await repo.refreshLast(uid);
+        }
+
+        setState(() => _protectDollar = true);
+      } catch (e) {
+        setState(() => _protectDollar = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No se pudo activar protector dólar: $e')),
+          );
+        }
+      }
+      return;
+    }
+
+    // Si desactivan, solo desmarca el ítem (no desactiva global del usuario)
+    setState(() => _protectDollar = false);
   }
 
   void _save() {
@@ -167,13 +159,8 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
       return;
     }
 
-    final user = FirebaseAuth.instance.currentUser;
-    final uid = user?.uid;
-
-    // En callbacks usa ref.read (no watch)
-    final proCloud = (uid == null)
-        ? false
-        : _proCloudFrom(ref.read(entitlementsProvider(uid)));
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final proCloud = _isProCloud(uid);
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final id = widget.initial?.id ?? 'p_$now';
@@ -184,22 +171,12 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
     final cost = _parseDouble(_cost);
     final price = _parseDouble(_price) ?? 0.0;
 
-    // Si calcMargin está ON, exigimos costo válido para poder calcular
-    if (!_isService && proCloud && _calcMargin) {
-      if (cost == null || cost <= 0 || price <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Para calcular margen, ingresa Costo y Precio válidos.')),
-        );
-        return;
-      }
-    }
-
     final item = InventoryItem(
       id: id,
       name: name,
       sku: sku,
       unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
-      salePrice: price,
+      salePrice: price, // aquí guardamos el BASE si hay protección dólar
       cost: _supportsStock ? cost : null,
       stock: _isService ? 0 : (widget.initial?.stock ?? 0),
       minStock: _supportsStock ? _parseDouble(_min) : null,
@@ -208,6 +185,9 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
       kind: _kind,
       pricingMode: _isService ? (_serviceHourly ? 'hourly' : 'fixed') : null,
       calcMargin: (proCloud && _supportsMargin) ? _calcMargin : false,
+
+      // NUEVO: solo PRO+Cloud y solo insumo/artículo
+      dollarProtected: (proCloud && _supportsDollarProtection) ? _protectDollar : false,
     );
 
     Navigator.pop(context, item);
@@ -216,24 +196,15 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.initial != null;
-    final user = FirebaseAuth.instance.currentUser;
-    final uid = user?.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final proCloud = _isProCloud(uid);
 
-    final entAsync = (uid == null) ? null : ref.watch(entitlementsProvider(uid));
-    final proCloud = (entAsync == null) ? false : _proCloudFrom(entAsync);
-
-    // Si deja de ser proCloud, apagamos calcMargin y SKU
-    if (!proCloud && (_calcMargin || _useSku)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _calcMargin = false;
-          _useSku = false;
-          _sku.clear();
-        });
-        _recalcMargins();
-      });
-    }
+    // Estado global del dólar (solo si PRO+Cloud)
+    final dollarStateAsync = (proCloud && uid != null)
+        ? ref.watch(dollarProtectionProvider(uid))
+        : const AsyncValue<DollarProtectionState>.data(
+            DollarProtectionState(enabled: false),
+          );
 
     return Scaffold(
       appBar: AppBar(
@@ -275,7 +246,7 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
           ),
           const SizedBox(height: 12),
 
-          // SKU PRO+Cloud
+          // SKU PRO+Cloud (solo insumo/artículo)
           if (_supportsStock) ...[
             if (proCloud) ...[
               Row(
@@ -351,6 +322,7 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
             const SizedBox(height: 8),
           ],
 
+          // Precio BASE
           TextField(
             controller: _price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -358,76 +330,28 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
           ),
           const SizedBox(height: 12),
 
-          // Costo + Márgenes (solo para no-service)
-          if (!_isService) ...[
-            TextField(
-              controller: _cost,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Costo'),
-            ),
-            const SizedBox(height: 12),
-
-            // Switch Calcular margen (PRO+Cloud)
+          // Margen (PRO+Cloud) solo insumo/artículo
+          if (_supportsMargin) ...[
             if (proCloud) ...[
               Row(
                 children: [
                   const Expanded(
-                    child: Text(
-                      'Calcular margen',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                    child: Text('Calcular margen (PRO)', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                   Switch(
                     value: _calcMargin,
-                    onChanged: (v) {
-                      setState(() => _calcMargin = v);
-                      _recalcMargins();
-                    },
+                    onChanged: (v) => setState(() => _calcMargin = v),
                   ),
                 ],
               ),
-
-              if (_calcMargin) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Márgenes calculados',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      _profitMoney == null
-                          ? Text(
-                              'Ingresa Costo y Precio para ver el cálculo.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Ganancia: Bs ${_fmtMoney(_profitMoney!)}'),
-                                const SizedBox(height: 4),
-                                Text(_markupPct == null
-                                    ? 'Markup (sobre costo): —'
-                                    : 'Markup (sobre costo): ${_fmtPct(_markupPct!)}%'),
-                                const SizedBox(height: 4),
-                                Text('Margen (sobre precio): ${_fmtPct(_marginPct!)}%'),
-                              ],
-                            ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
+              Text(
+                'Si está activo, podrás usar costo vs precio para ver margen (en % y/o Bs).',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
             ] else ...[
               Text(
-                'Calcular margen (PRO + Cloud Sync)',
+                'Calcular margen (PRO)',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
@@ -439,8 +363,15 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
             ],
           ],
 
-          // Stock mínimo (si aplica)
-          if (_supportsStock) ...[
+          // Costos/stock (solo insumo/artículo)
+          if (!_isService) ...[
+            TextField(
+              controller: _cost,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Costo (opcional)'),
+            ),
+            const SizedBox(height: 12),
+
             TextField(
               controller: _min,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -449,11 +380,104 @@ class _InventoryItemFormPageState extends ConsumerState<InventoryItemFormPage> {
             const SizedBox(height: 12),
           ],
 
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _save,
-            child: const Text('Guardar'),
-          ),
+          // =========================
+          // PRO: Protector de dólar (solo insumo/artículo)
+          // =========================
+          if (_supportsDollarProtection) ...[
+            if (proCloud && uid != null) ...[
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Protector de dólar (PRO)', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                  Switch(
+                    value: _protectDollar,
+                    onChanged: (v) => _toggleProtectDollar(value: v, proCloud: proCloud, uid: uid),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Si lo activas, este ítem usará el factor (Actual/Base) del usuario para ajustar precios.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+
+              // Preview de ajuste (solo si switch está on)
+              if (_protectDollar) ...[
+                dollarStateAsync.when(
+                  data: (st) {
+                    double? base = st.baseRate;
+                    double? last = st.lastRate;
+
+                    final basePrice = _parseDouble(_price);
+                    final adjusted = (basePrice != null)
+                        ? DollarRepository.adjustAmount(baseAmount: basePrice, baseRate: base, lastRate: last)
+                        : null;
+
+                    String fmt(double? v) => v == null ? '—' : v.toStringAsFixed(2);
+
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Tasa Base: ${fmt(base)} Bs/USD'),
+                          Text('Tasa Actual: ${fmt(last)} Bs/USD'),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Precio ajustado: ${fmt(adjusted)}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  final repo = ref.read(dollarRepositoryProvider);
+                                  await repo.refreshLast(uid);
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text('Error al actualizar tasa: $e')),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Actualizar tasa'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  ),
+                  error: (err, st) => Text('Error dólar: $err'),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ] else ...[
+              Text(
+                'Protector de dólar (PRO)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Disponible solo en Plan PRO con Cloud Sync activo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
         ],
       ),
     );
