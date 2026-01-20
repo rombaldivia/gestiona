@@ -96,7 +96,7 @@ class InventoryPage extends ConsumerWidget {
                             itemBuilder: (_, i) {
                               final item = s.filtered[i];
                               final isService =
-                                  item.kind == InventoryItemKind.service;
+                                  item.kind == InventoryItemKind.servicio;
                               final low =
                                   item.minStock != null &&
                                   item.stock <= item.minStock!;
@@ -157,7 +157,7 @@ class InventoryPage extends ConsumerWidget {
                                                 ),
                                               ),
                                               Text(
-                                                'Stock: ${_fmt(item.stock)} ${item.unit ?? ''}',
+                                                'Stock: ${_fmt(item.stock.toDouble())} ${item.unit ?? ''}',
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   color: low
