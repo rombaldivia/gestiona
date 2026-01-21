@@ -742,6 +742,7 @@ Future<void> _askPurchaseStockAndCost({
                       }
                     }
                   }
+                  if (!ctx.mounted) return;
 
                   final costBob = computeCostBob();
                   if (costBob == null || costBob <= 0) {
