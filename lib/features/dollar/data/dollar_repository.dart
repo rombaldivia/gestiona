@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 
 class DollarRepository {
-  DollarRepository({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
+  DollarRepository({FirebaseFirestore? db})
+    : _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -39,14 +40,14 @@ class DollarRepository {
         'lastRate': last,
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
         'provider': 'binance',
-      }
+      },
     }, SetOptions(merge: true));
   }
 
   /// Apaga la protección dólar (no borra rates, solo enabled=false).
   Future<void> disable(String uid) async {
     await _db.collection('users').doc(uid).set({
-      'dollarProtection': {'enabled': false}
+      'dollarProtection': {'enabled': false},
     }, SetOptions(merge: true));
   }
 
@@ -58,7 +59,35 @@ class DollarRepository {
         'lastRate': last,
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
         'provider': 'binance',
-      }
+      },
+    }, SetOptions(merge: true));
+  }
+
+  /// Setea baseRate manualmente (y actualiza metadata). No toca lastRate.
+  Future<void> setBaseRate(
+    String uid,
+    double baseRate, {
+    String provider = 'manual',
+  }) async {
+    await _db.collection('users').doc(uid).set({
+      'dollarProtection': {
+        'baseRate': baseRate,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        'provider': provider,
+      },
+    }, SetOptions(merge: true));
+  }
+
+  /// Setea baseRate y lastRate al valor actual de la API (una sola llamada).
+  Future<void> setBaseAndLastToCurrent(String uid) async {
+    final last = await fetchLastRate();
+    await _db.collection('users').doc(uid).set({
+      'dollarProtection': {
+        'baseRate': last,
+        'lastRate': last,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        'provider': 'binance',
+      },
     }, SetOptions(merge: true));
   }
 
