@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/entitlements.dart';
+import '../domain/plan_tier.dart';
 import 'entitlements_providers.dart';
+import 'entitlements_scope.dart';
 
 typedef EntitlementsWidgetBuilder = Widget Function(
   BuildContext context,
@@ -19,8 +21,6 @@ class EntitlementsGate extends ConsumerWidget {
     required this.child,
   });
 
-  /// Si alguna vez quieres forzar builder (como tu versión anterior),
-  /// usa esta factory.
   factory EntitlementsGate.compat({
     Key? key,
     User? user,
@@ -46,20 +46,36 @@ class EntitlementsGate extends ConsumerWidget {
 
     final entAsync = ref.watch(entitlementsProvider(u.uid));
 
-    // Si no hay builder, solo “toca” el provider y devuelve el child.
+    // ✅ Si no hay builder, IGUAL proveemos EntitlementsScope al resto de la app.
     final b = builder;
     if (b == null) {
       return entAsync.when(
-        data: (_) => child,
-        loading: () => child,
-        error: (err, st) => child,
+        data: (e) => EntitlementsScope(entitlements: e, child: child),
+        loading: () => EntitlementsScope(
+          entitlements: Entitlements.forTier(PlanTier.free),
+          child: child,
+        ),
+        error: (err, st) => EntitlementsScope(
+          entitlements: Entitlements.forTier(PlanTier.free),
+          child: child,
+        ),
       );
     }
 
+    // ✅ Si hay builder, también envolvemos con scope (por consistencia).
     return entAsync.when(
-      data: (e) => b(context, e, child),
-      loading: () => child,
-      error: (err, st) => child,
+      data: (e) => EntitlementsScope(
+        entitlements: e,
+        child: b(context, e, child),
+      ),
+      loading: () => EntitlementsScope(
+        entitlements: Entitlements.forTier(PlanTier.free),
+        child: child,
+      ),
+      error: (err, st) => EntitlementsScope(
+        entitlements: Entitlements.forTier(PlanTier.free),
+        child: child,
+      ),
     );
   }
 }
