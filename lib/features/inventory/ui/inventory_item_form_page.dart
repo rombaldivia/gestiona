@@ -1,142 +1,238 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../dollar/presentation/dollar_providers.dart';
-import '../../subscription/domain/plan_tier.dart';
-import '../../subscription/presentation/entitlements_providers.dart';
 import '../domain/inventory_item.dart';
 
-class InventoryItemFormPage extends ConsumerStatefulWidget {
-  const InventoryItemFormPage({super.key, this.initial});
+class InventoryItemFormPage extends StatefulWidget {
+  const InventoryItemFormPage({
+    super.key,
+    this.initial,
+    this.existing, // compat
+  });
+
   final InventoryItem? initial;
+  final InventoryItem? existing;
 
   @override
-  ConsumerState<InventoryItemFormPage> createState() =>
-      _InventoryItemFormPageState();
+  State<InventoryItemFormPage> createState() => _InventoryItemFormPageState();
 }
 
-class _InventoryItemFormPageState
-    extends ConsumerState<InventoryItemFormPage> {
-  // Básico (FREE)
+class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
   final _name = TextEditingController();
+  final _sku = TextEditingController();
   final _unit = TextEditingController();
-  final _price = TextEditingController(); // precio de venta (FREE)
-  final _stock = TextEditingController();
-  final _minStock = TextEditingController();
 
-  // PRO
-  final _cost = TextEditingController(); // costo de adquisición
-  final _margin = TextEditingController(); // margen %
-  final _usdBaseRate = TextEditingController();
-  final _usdBaseRateFocus = FocusNode();
-  bool _savingUsd = false;
+  final _price = TextEditingController(); // venta / tarifa
+  final _cost = TextEditingController();
 
-  late InventoryItemKind _kind;
-  bool _protectDollar = false;
+  final _markup = TextEditingController(); // % margen
+  final _min = TextEditingController();
 
-  bool get _isService => _kind == InventoryItemKind.servicio;
-  bool get _supportsStock => !_isService;
+  bool _useSku = false;
 
-  double? _d(TextEditingController c) {
-    final t = c.text.trim().replaceAll(',', '.');
-    if (t.isEmpty) return null;
-    return double.tryParse(t);
-  }
+  InventoryItemKind _kind = InventoryItemKind.articulo;
 
-  bool _isProCloud(String? uid) {
-    if (uid == null) return false;
-    final ent = ref.watch(entitlementsProvider(uid));
-    return ent.maybeWhen(
-      data: (e) => e.tier == PlanTier.pro && e.cloudSync,
-      orElse: () => false,
-    );
-  }
+  // Servicio: fixed vs hourly
+  bool _serviceHourly = false;
 
-  // ======================
-  // MARGEN (SOLO PRO)
-  // ======================
-  void _recalcPriceFromMargin() {
-    final cost = _d(_cost);
-    final margin = _d(_margin);
-    if (cost == null || margin == null || margin >= 100) return;
-    final price = cost / (1 - margin / 100);
-    _price.text = price.toStringAsFixed(2);
-  }
+  // Insumo/Artículo: activar cálculo de margen
+  bool _calcMargin = false;
 
-  void _recalcMarginFromPrice() {
-    final cost = _d(_cost);
-    final price = _d(_price);
-    if (cost == null || price == null || price <= 0) return;
-    final margin = (1 - cost / price) * 100;
-    _margin.text = margin.toStringAsFixed(2);
-  }
+  bool _updating = false;
 
-  // ======================
-  // DÓLAR (SOLO PRO)
-  // ======================
-  Future<void> _refreshUsd(String uid) async {
-    setState(() => _savingUsd = true);
-    try {
-      final repo = ref.read(dollarRepositoryProvider);
-      final rate = await repo.fetchLastRate();
-      await repo.setBaseAndLastToCurrent(uid);
-
-      final txt = rate.toStringAsFixed(2);
-      _usdBaseRate.value = TextEditingValue(
-        text: txt,
-        selection: TextSelection.collapsed(offset: txt.length),
-      );
-    } finally {
-      if (mounted) setState(() => _savingUsd = false);
-    }
-  }
+  InventoryItem? get _it => widget.initial ?? widget.existing;
 
   @override
   void initState() {
     super.initState();
-    final i = widget.initial;
-    _kind = i?.kind ?? InventoryItemKind.articulo;
 
-    if (i != null) {
-      _name.text = i.name;
-      _unit.text = i.unit ?? '';
-      _price.text = i.salePrice.toString();
-      _stock.text = i.stock.toString();
-      _minStock.text = i.minStock?.toString() ?? '';
-      _cost.text = i.cost?.toString() ?? '';
-      _protectDollar = i.dollarProtected;
+    final it = _it;
+    if (it != null) {
+      _kind = it.kind;
+
+      _name.text = it.name;
+      _sku.text = it.sku ?? '';
+      _useSku = (it.sku != null && it.sku!.trim().isNotEmpty);
+
+      _unit.text = it.unit ?? '';
+
+      _price.text = it.salePrice?.toString() ?? '';
+      _cost.text = it.cost?.toString() ?? '';
+      _min.text = it.minStock?.toString() ?? '';
+
+      _calcMargin = it.calcMargin;
+      _serviceHourly = (it.pricingMode ?? '') == 'hourly';
+
+      // Si calcMargin ON y tenemos costo+precio, precargamos % margen
+      final c = it.cost;
+      final p = it.salePrice;
+      if (_calcMargin && c != null && c > 0 && p != null) {
+        final pct = ((p - c) / c) * 100.0;
+        _markup.text = _fmtPct(pct);
+      }
     }
+
+    _cost.addListener(_onCostChanged);
+    _price.addListener(_onPriceChanged);
+    _markup.addListener(_onMarkupChanged);
   }
 
   @override
   void dispose() {
+    _cost.removeListener(_onCostChanged);
+    _price.removeListener(_onPriceChanged);
+    _markup.removeListener(_onMarkupChanged);
+
     _name.dispose();
+    _sku.dispose();
     _unit.dispose();
     _price.dispose();
-    _stock.dispose();
-    _minStock.dispose();
     _cost.dispose();
-    _margin.dispose();
-    _usdBaseRate.dispose();
-    _usdBaseRateFocus.dispose();
+    _markup.dispose();
+    _min.dispose();
     super.dispose();
   }
 
-  void _save(bool proCloud) {
+  double? _parseDouble(TextEditingController c) {
+    final t = c.text.trim();
+    if (t.isEmpty) return null;
+    return double.tryParse(t.replaceAll(',', '.'));
+  }
+
+  void _setTextSilently(TextEditingController c, String v) {
+    _updating = true;
+    c.text = v;
+    c.selection = TextSelection.collapsed(offset: c.text.length);
+    _updating = false;
+  }
+
+  String _fmtMoney(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(2);
+  }
+
+  String _fmtPct(double v) {
+    if (v.isNaN || v.isInfinite) return '';
+    return v.toStringAsFixed(2);
+  }
+
+  bool get _supportsStock =>
+      _kind == InventoryItemKind.insumo || _kind == InventoryItemKind.articulo;
+
+  bool get _supportsMargin =>
+      _kind == InventoryItemKind.insumo || _kind == InventoryItemKind.articulo;
+
+  String get _priceLabel {
+    switch (_kind) {
+      case InventoryItemKind.articulo:
+        return 'Precio de venta';
+      case InventoryItemKind.insumo:
+        return 'Precio por uso (opcional)';
+      case InventoryItemKind.servicio:
+        return _serviceHourly ? 'Tarifa por hora' : 'Precio fijo';
+    }
+  }
+
+  void _onCostChanged() {
+    if (_updating) return;
+    if (!_supportsMargin) return;
+    if (!_calcMargin) return;
+
+    final cost = _parseDouble(_cost);
+    if (cost == null || cost <= 0) return;
+
+    final markup = _parseDouble(_markup);
+    final price = _parseDouble(_price);
+
+    if (markup != null) {
+      final newPrice = cost * (1.0 + markup / 100.0);
+      _setTextSilently(_price, _fmtMoney(newPrice));
+      return;
+    }
+
+    if (price != null) {
+      final pct = ((price - cost) / cost) * 100.0;
+      _setTextSilently(_markup, _fmtPct(pct));
+      return;
+    }
+  }
+
+  void _onMarkupChanged() {
+    if (_updating) return;
+    if (!_supportsMargin) return;
+    if (!_calcMargin) return;
+
+    final cost = _parseDouble(_cost);
+    final markup = _parseDouble(_markup);
+    if (cost == null || cost <= 0) return;
+    if (markup == null) return;
+
+    final newPrice = cost * (1.0 + markup / 100.0);
+    _setTextSilently(_price, _fmtMoney(newPrice));
+  }
+
+  void _onPriceChanged() {
+    if (_updating) return;
+    if (!_supportsMargin) return;
+    if (!_calcMargin) return;
+
+    final cost = _parseDouble(_cost);
+    final price = _parseDouble(_price);
+    if (cost == null || cost <= 0) return;
+    if (price == null) return;
+
+    final pct = ((price - cost) / cost) * 100.0;
+    _setTextSilently(_markup, _fmtPct(pct));
+  }
+
+  void _setKind(InventoryItemKind k) {
+    setState(() {
+      _kind = k;
+
+      if (_kind == InventoryItemKind.servicio) {
+        _unit.clear();
+        _min.clear();
+        _calcMargin = false;
+        _markup.clear();
+      } else {
+        _serviceHourly = false;
+      }
+    });
+  }
+
+  void _save() {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nombre requerido.')));
+      return;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final id = _it?.id ?? 'p_$now';
+
+    final skuText = _sku.text.trim();
+    final sku = (_useSku && skuText.isNotEmpty) ? skuText : null;
+
+    final cost = _parseDouble(_cost);
+    final price = _parseDouble(_price);
+
     final item = InventoryItem(
-      id: widget.initial?.id ??
-          'p_${DateTime.now().millisecondsSinceEpoch}',
-      name: _name.text.trim(),
+      id: id,
+      name: name,
+      sku: sku,
       unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
-      salePrice: _d(_price) ?? 0,
-      cost: proCloud ? _d(_cost) : null,
-      stock: _supportsStock ? int.tryParse(_stock.text) ?? 0 : 0,
-      minStock: _supportsStock ? _d(_minStock) : null,
-      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      salePrice: price,
+      cost: cost,
+      stock: _kind == InventoryItemKind.servicio ? 0 : (_it?.stock ?? 0),
+      minStock: _supportsStock ? _parseDouble(_min) : null,
+      updatedAtMs: now,
       dirty: true,
       kind: _kind,
-      dollarProtected: proCloud ? _protectDollar : false,
+      pricingMode: _kind == InventoryItemKind.servicio
+          ? (_serviceHourly ? 'hourly' : 'fixed')
+          : null,
+      calcMargin: _supportsMargin ? _calcMargin : false,
     );
 
     Navigator.pop(context, item);
@@ -144,107 +240,212 @@ class _InventoryItemFormPageState
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    final proCloud = _isProCloud(uid);
-
-    if (proCloud && _margin.text.isEmpty && _cost.text.isNotEmpty) {
-      _recalcMarginFromPrice();
-    }
+    final editing = _it != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.initial == null ? 'Nuevo ítem' : 'Editar ítem'),
-        actions: [
-          TextButton(onPressed: () => _save(proCloud), child: const Text('Guardar')),
-        ],
+        title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
+        actions: [TextButton(onPressed: _save, child: const Text('Guardar'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nombre')),
-          const SizedBox(height: 12),
-
-          if (_supportsStock) ...[
-            TextField(controller: _unit, decoration: const InputDecoration(labelText: 'Unidad')),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _stock,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Cantidad / Stock'),
+          InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Tipo',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _minStock,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Stock mínimo'),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<InventoryItemKind>(
+                value: _kind,
+                isExpanded: true,
+                items: InventoryItemKind.values
+                    .map(
+                      (k) => DropdownMenuItem(value: k, child: Text(k.label)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  _setKind(v);
+                },
+              ),
             ),
-            const SizedBox(height: 12),
-          ],
-
-          // PRECIO (FREE)
-          TextField(
-            controller: _price,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Precio de venta'),
-            onChanged: (_) {
-              if (proCloud) _recalcMarginFromPrice();
-            },
           ),
           const SizedBox(height: 12),
 
-          // COSTO + MARGEN (SOLO PRO)
-          if (proCloud) ...[
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: 'Nombre',
+              hintText: 'Ej: Impresión / Vinil / Resma A4 75g',
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'SKU',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Row(
+                children: [
+                  const Text('Usar SKU'),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _useSku,
+                    onChanged: (v) {
+                      setState(() => _useSku = v);
+                      if (!v) _sku.clear();
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (_useSku) ...[
             TextField(
-              controller: _cost,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Costo de adquisición'),
-              onChanged: (_) => _recalcMarginFromPrice(),
+              controller: _sku,
+              decoration: const InputDecoration(
+                labelText: 'SKU del ítem',
+                hintText: 'Ej: PAP-A4-75',
+              ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _margin,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Margen (%)'),
-              onChanged: (_) => _recalcPriceFromMargin(),
+          ] else ...[
+            Text(
+              'Opcional. Actívalo si quieres usar un código interno.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
           ],
 
-          // DÓLAR (SOLO PRO)
-          if (proCloud && uid != null) ...[
+          if (_supportsStock) ...[
+            TextField(
+              controller: _unit,
+              decoration: const InputDecoration(
+                labelText: 'Unidad (opcional)',
+                hintText: 'u, kg, m, resma, ml...',
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (_kind == InventoryItemKind.servicio) ...[
             Row(
               children: [
                 const Expanded(
-                  child: Text('Protector de dólar (PRO)',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'Cobro',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                Switch(
-                  value: _protectDollar,
-                  onChanged: (v) => setState(() => _protectDollar = v),
+                Row(
+                  children: [
+                    const Text('Cobrar por hora'),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: _serviceHourly,
+                      onChanged: (v) => setState(() => _serviceHourly = v),
+                    ),
+                  ],
                 ),
               ],
             ),
-            if (_protectDollar) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _usdBaseRate,
-                focusNode: _usdBaseRateFocus,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Tasa Base (Bs/USD)',
-                  suffixIcon: IconButton(
-                    icon: _savingUsd
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh),
-                    onPressed:
-                        _savingUsd ? null : () => _refreshUsd(uid),
+            const SizedBox(height: 8),
+          ],
+
+          TextField(
+            controller: _price,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: _priceLabel,
+              hintText: 'Ej: 50',
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (_kind != InventoryItemKind.servicio) ...[
+            TextField(
+              controller: _cost,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Costo (opcional)',
+                hintText: 'Ej: 35',
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (_supportsMargin) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Margen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+                Row(
+                  children: [
+                    const Text('Calcular margen'),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: _calcMargin,
+                      onChanged: (v) {
+                        setState(() => _calcMargin = v);
+                        if (!v) _markup.clear();
+                        if (v) _onPriceChanged();
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (_calcMargin) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _markup,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: '% margen',
+                  suffixText: '%',
+                  hintText: 'Ej: 30',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Tip: llena “Costo + %” o “Costo + Precio”. El otro se ajusta solo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              const SizedBox(height: 12),
+            ],
+          ],
+
+          if (_supportsStock) ...[
+            TextField(
+              controller: _min,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Stock mínimo (alerta)',
+                hintText: 'Ej: 5',
+              ),
+            ),
+            if (editing) ...[
+              const SizedBox(height: 18),
+              Text(
+                'Stock actual: ${_it!.stock} ${_it!.unit ?? ''}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ],

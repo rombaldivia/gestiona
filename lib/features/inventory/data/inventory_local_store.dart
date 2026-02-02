@@ -5,26 +5,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/inventory_item.dart';
 import '../domain/stock_movement.dart';
 
-/// Local store simple (SharedPreferences) para MVP.
-///
-/// - Está pensado para listas pequeñas/medianas.
-/// - Si luego crece, lo ideal es migrar a una BD local (Drift/Isar/Hive)
-///   manteniendo la misma interfaz.
 class InventoryLocalStore {
-  static String _kItems(String uid, String companyId) =>
-      'inv.items.$uid.$companyId';
-  static String _kMovements(String uid, String companyId) =>
-      'inv.moves.$uid.$companyId';
+  static const _kItems = 'inventory_items';
+  static const _kMovs = 'inventory_movements';
+
+  String _key(String base, {required String uid, required String companyId}) {
+    return '$base::$uid::$companyId';
+  }
 
   Future<List<InventoryItem>> listItems({
     required String uid,
     required String companyId,
   }) async {
     final sp = await SharedPreferences.getInstance();
-    final raw = sp.getString(_kItems(uid, companyId));
-    if (raw == null) return [];
+    final raw = sp.getString(_key(_kItems, uid: uid, companyId: companyId));
+    if (raw == null || raw.trim().isEmpty) return [];
     final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    return list.map(InventoryItem.fromJson).toList();
+    return list.map((m) => InventoryItem.fromJson(m)).toList();
   }
 
   Future<void> saveItems({
@@ -33,10 +30,8 @@ class InventoryLocalStore {
     required List<InventoryItem> items,
   }) async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(
-      _kItems(uid, companyId),
-      jsonEncode(items.map((e) => e.toJson()).toList()),
-    );
+    final encoded = jsonEncode(items.map((e) => e.toJson()).toList());
+    await sp.setString(_key(_kItems, uid: uid, companyId: companyId), encoded);
   }
 
   Future<List<StockMovement>> listMovements({
@@ -44,10 +39,10 @@ class InventoryLocalStore {
     required String companyId,
   }) async {
     final sp = await SharedPreferences.getInstance();
-    final raw = sp.getString(_kMovements(uid, companyId));
-    if (raw == null) return [];
+    final raw = sp.getString(_key(_kMovs, uid: uid, companyId: companyId));
+    if (raw == null || raw.trim().isEmpty) return [];
     final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    return list.map(StockMovement.fromJson).toList();
+    return list.map((m) => StockMovement.fromJson(m)).toList();
   }
 
   Future<void> saveMovements({
@@ -56,18 +51,7 @@ class InventoryLocalStore {
     required List<StockMovement> movements,
   }) async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(
-      _kMovements(uid, companyId),
-      jsonEncode(movements.map((e) => e.toJson()).toList()),
-    );
-  }
-
-  Future<void> clearAllForCompany({
-    required String uid,
-    required String companyId,
-  }) async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.remove(_kItems(uid, companyId));
-    await sp.remove(_kMovements(uid, companyId));
+    final encoded = jsonEncode(movements.map((e) => e.toJson()).toList());
+    await sp.setString(_key(_kMovs, uid: uid, companyId: companyId), encoded);
   }
 }

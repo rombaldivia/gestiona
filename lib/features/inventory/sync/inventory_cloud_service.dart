@@ -16,7 +16,7 @@ class InventoryCloudService {
   final FirebaseAuth _auth;
 
   CollectionReference<Map<String, dynamic>> _inventoryCol(String companyId) =>
-      _db.collection('companies').doc(companyId).collection('inventory');
+      _db.collection('companies').doc(companyId).collection('inventory_items');
 
   /// Crea o actualiza un item en Firestore (merge).
   Future<void> createOrUpdateItem(String companyId, InventoryItem item) async {
