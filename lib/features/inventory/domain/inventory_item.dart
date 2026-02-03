@@ -1,6 +1,8 @@
-enum InventoryItemKind { articulo, insumo, servicio }
+enum InventoryItemKind {
+  articulo,
+  insumo,
+  servicio;
 
-extension InventoryItemKindX on InventoryItemKind {
   String get label {
     switch (this) {
       case InventoryItemKind.articulo:
@@ -12,26 +14,19 @@ extension InventoryItemKindX on InventoryItemKind {
     }
   }
 
-  String get asString {
-    switch (this) {
-      case InventoryItemKind.articulo:
-        return 'articulo';
-      case InventoryItemKind.insumo:
-        return 'insumo';
-      case InventoryItemKind.servicio:
-        return 'servicio';
-    }
-  }
-
-  static InventoryItemKind fromString(String? v) {
-    switch ((v ?? '').toLowerCase()) {
+  static InventoryItemKind parse(String? v) {
+    switch (v) {
+      case 'articulo':
+        return InventoryItemKind.articulo;
       case 'insumo':
         return InventoryItemKind.insumo;
       case 'servicio':
+        return InventoryItemKind.servicio;
+
+      // backward-compat por si en algún lado guardaste "service"
       case 'service':
         return InventoryItemKind.servicio;
-      case 'articulo':
-      case 'item':
+
       default:
         return InventoryItemKind.articulo;
     }
@@ -44,70 +39,71 @@ class InventoryItem {
     required this.name,
     this.sku,
     this.unit,
-    required this.salePrice,
-    this.cost,
-    required this.stock,
-    this.minStock,
+    num? salePrice,
+    num? cost,
+    required num stock,
+    num? minStock,
     required this.updatedAtMs,
+    this.deleted = false,
     this.dirty = false,
     this.kind = InventoryItemKind.articulo,
+
+    /// Solo para servicio: 'fixed' o 'hourly'
     this.pricingMode,
+
+    /// Solo para insumo/articulo: activa cálculo de margen en UI
     this.calcMargin = false,
-    this.dollarProtected = false,
-  });
+  }) : salePrice = salePrice?.toDouble(),
+       cost = cost?.toDouble(),
+       stock = stock.toDouble(),
+       minStock = minStock?.toDouble();
 
   final String id;
   final String name;
-
-  /// Feature PRO: SKU (si aplica)
   final String? sku;
 
-  /// Unidad (u, kg, m...)
+  /// unidad de stock/uso (u, kg, m, resma...)
   final String? unit;
 
-  /// Precio de venta (o precio del servicio)
-  final double salePrice;
+  /// precio de venta / tarifa (para servicio también)
+  final double? salePrice;
 
-  /// Costo (insumo/artículo)
+  /// costo (para insumo/articulo)
   final double? cost;
 
-  /// Stock (insumo/artículo)
-  final int stock;
+  /// stock actual (para servicio se usa 0)
+  final double stock;
 
+  /// stock mínimo (alerta)
   final double? minStock;
 
-  /// Timestamp ms
   final int updatedAtMs;
 
-  /// Marca para sync local-first
+  final bool deleted;
   final bool dirty;
 
   final InventoryItemKind kind;
 
-  /// Para servicios: hourly/fixed
   final String? pricingMode;
-
-  /// Feature PRO: calcular margen
   final bool calcMargin;
 
-  /// Feature PRO: protector dólar (solo insumo/artículo)
-  final bool dollarProtected;
+  bool get tracksStock => kind != InventoryItemKind.servicio;
 
   InventoryItem copyWith({
     String? id,
     String? name,
     String? sku,
     String? unit,
-    double? salePrice,
-    double? cost,
-    int? stock,
-    double? minStock,
+    num? salePrice,
+    num? cost,
+    num? stock,
+    num? minStock,
     int? updatedAtMs,
+    bool? deleted,
     bool? dirty,
     InventoryItemKind? kind,
     String? pricingMode,
     bool? calcMargin,
-    bool? dollarProtected,
   }) {
     return InventoryItem(
       id: id ?? this.id,
@@ -119,16 +115,21 @@ class InventoryItem {
       stock: stock ?? this.stock,
       minStock: minStock ?? this.minStock,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      deleted: deleted ?? this.deleted,
       dirty: dirty ?? this.dirty,
       kind: kind ?? this.kind,
       pricingMode: pricingMode ?? this.pricingMode,
       calcMargin: calcMargin ?? this.calcMargin,
-      dollarProtected: dollarProtected ?? this.dollarProtected,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
+  /// Mantén compatibilidad con tu data-layer
+  Map<String, dynamic> toJson() => toMap();
+  factory InventoryItem.fromJson(Map<String, dynamic> map) =>
+      InventoryItem.fromMap(map);
+
+  Map<String, dynamic> toMap() {
+    return {
       'id': id,
       'name': name,
       'sku': sku,
@@ -138,45 +139,35 @@ class InventoryItem {
       'stock': stock,
       'minStock': minStock,
       'updatedAtMs': updatedAtMs,
+      'deleted': deleted,
       'dirty': dirty,
-      'kind': kind.asString,
+      'kind': kind.name,
       'pricingMode': pricingMode,
       'calcMargin': calcMargin,
-      'dollarProtected': dollarProtected,
     };
   }
 
-  static double? _asDouble(dynamic v) {
-    if (v == null) return null;
-    if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v.replaceAll(',', '.'));
-    return null;
-  }
+  factory InventoryItem.fromMap(Map<String, dynamic> map) {
+    double? d(dynamic v) => (v is num) ? v.toDouble() : null;
 
-  static int _asInt(dynamic v, {int fallback = 0}) {
-    if (v == null) return fallback;
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v) ?? fallback;
-    return fallback;
-  }
+    final kindStr = (map['kind'] ?? map['type']) as String?;
+    final kind = InventoryItemKind.parse(kindStr);
 
-  factory InventoryItem.fromJson(Map<String, dynamic> json) {
     return InventoryItem(
-      id: (json['id'] as String?) ?? '',
-      name: (json['name'] as String?) ?? '',
-      sku: json['sku'] as String?,
-      unit: json['unit'] as String?,
-      salePrice: (_asDouble(json['salePrice']) ?? 0.0),
-      cost: _asDouble(json['cost']),
-      stock: _asInt(json['stock'], fallback: 0),
-      minStock: _asDouble(json['minStock']),
-      updatedAtMs: _asInt(json['updatedAtMs'], fallback: 0),
-      dirty: (json['dirty'] as bool?) ?? false,
-      kind: InventoryItemKindX.fromString(json['kind'] as String?),
-      pricingMode: json['pricingMode'] as String?,
-      calcMargin: (json['calcMargin'] as bool?) ?? false,
-      dollarProtected: (json['dollarProtected'] as bool?) ?? false,
+      id: (map['id'] ?? '') as String,
+      name: (map['name'] ?? '') as String,
+      sku: map['sku'] as String?,
+      unit: map['unit'] as String?,
+      salePrice: d(map['salePrice']),
+      cost: d(map['cost']),
+      stock: d(map['stock']) ?? 0,
+      minStock: d(map['minStock']),
+      updatedAtMs: (map['updatedAtMs'] ?? 0) as int,
+      deleted: (map['deleted'] ?? false) as bool,
+      dirty: (map['dirty'] ?? false) as bool,
+      kind: kind,
+      pricingMode: map['pricingMode'] as String?,
+      calcMargin: (map['calcMargin'] ?? false) as bool,
     );
   }
 }
