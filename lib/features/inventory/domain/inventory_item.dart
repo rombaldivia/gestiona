@@ -22,11 +22,8 @@ enum InventoryItemKind {
         return InventoryItemKind.insumo;
       case 'servicio':
         return InventoryItemKind.servicio;
-
-      // backward-compat por si en algún lado guardaste "service"
       case 'service':
         return InventoryItemKind.servicio;
-
       default:
         return InventoryItemKind.articulo;
     }
@@ -47,45 +44,54 @@ class InventoryItem {
     this.deleted = false,
     this.dirty = false,
     this.kind = InventoryItemKind.articulo,
-
-    /// Solo para servicio: 'fixed' o 'hourly'
     this.pricingMode,
-
-    /// Solo para insumo/articulo: activa cálculo de margen en UI
     this.calcMargin = false,
-  }) : salePrice = salePrice?.toDouble(),
-       cost = cost?.toDouble(),
-       stock = stock.toDouble(),
-       minStock = minStock?.toDouble();
+
+    // PRO: tasa por item
+    this.costCurrency = 'bob', // 'bob' | 'usd'
+    num? costUsd,
+    num? usdRate,
+    this.usdRateUpdatedAtMs,
+    this.usdRateSource = 'bo.dolarapi/binance',
+
+    // PRO: protector
+    this.protectMargin = false,
+    num? protectedUsdRateAtSave,
+  })  : salePrice = salePrice?.toDouble(),
+        cost = cost?.toDouble(),
+        stock = stock.toDouble(),
+        minStock = minStock?.toDouble(),
+        costUsd = costUsd?.toDouble(),
+        usdRate = usdRate?.toDouble(),
+        protectedUsdRateAtSave = protectedUsdRateAtSave?.toDouble();
 
   final String id;
   final String name;
   final String? sku;
-
-  /// unidad de stock/uso (u, kg, m, resma...)
   final String? unit;
-
-  /// precio de venta / tarifa (para servicio también)
   final double? salePrice;
-
-  /// costo (para insumo/articulo)
-  final double? cost;
-
-  /// stock actual (para servicio se usa 0)
+  final double? cost; // Bs (convertido si venía de USD)
   final double stock;
-
-  /// stock mínimo (alerta)
   final double? minStock;
-
   final int updatedAtMs;
 
   final bool deleted;
   final bool dirty;
 
   final InventoryItemKind kind;
-
   final String? pricingMode;
   final bool calcMargin;
+
+  // USD per item
+  final String costCurrency;
+  final double? costUsd;
+  final double? usdRate;
+  final int? usdRateUpdatedAtMs;
+  final String usdRateSource;
+
+  // Protector: mantener margen frente a cambio de dólar
+  final bool protectMargin;
+  final double? protectedUsdRateAtSave;
 
   bool get tracksStock => kind != InventoryItemKind.servicio;
 
@@ -104,6 +110,15 @@ class InventoryItem {
     InventoryItemKind? kind,
     String? pricingMode,
     bool? calcMargin,
+
+    String? costCurrency,
+    num? costUsd,
+    num? usdRate,
+    int? usdRateUpdatedAtMs,
+    String? usdRateSource,
+
+    bool? protectMargin,
+    num? protectedUsdRateAtSave,
   }) {
     return InventoryItem(
       id: id ?? this.id,
@@ -120,13 +135,18 @@ class InventoryItem {
       kind: kind ?? this.kind,
       pricingMode: pricingMode ?? this.pricingMode,
       calcMargin: calcMargin ?? this.calcMargin,
+
+      costCurrency: costCurrency ?? this.costCurrency,
+      costUsd: costUsd ?? this.costUsd,
+      usdRate: usdRate ?? this.usdRate,
+      usdRateUpdatedAtMs: usdRateUpdatedAtMs ?? this.usdRateUpdatedAtMs,
+      usdRateSource: usdRateSource ?? this.usdRateSource,
+
+      protectMargin: protectMargin ?? this.protectMargin,
+      protectedUsdRateAtSave:
+          protectedUsdRateAtSave ?? this.protectedUsdRateAtSave,
     );
   }
-
-  /// Mantén compatibilidad con tu data-layer
-  Map<String, dynamic> toJson() => toMap();
-  factory InventoryItem.fromJson(Map<String, dynamic> map) =>
-      InventoryItem.fromMap(map);
 
   Map<String, dynamic> toMap() {
     return {
@@ -144,6 +164,15 @@ class InventoryItem {
       'kind': kind.name,
       'pricingMode': pricingMode,
       'calcMargin': calcMargin,
+
+      'costCurrency': costCurrency,
+      'costUsd': costUsd,
+      'usdRate': usdRate,
+      'usdRateUpdatedAtMs': usdRateUpdatedAtMs,
+      'usdRateSource': usdRateSource,
+
+      'protectMargin': protectMargin,
+      'protectedUsdRateAtSave': protectedUsdRateAtSave,
     };
   }
 
@@ -168,6 +197,19 @@ class InventoryItem {
       kind: kind,
       pricingMode: map['pricingMode'] as String?,
       calcMargin: (map['calcMargin'] ?? false) as bool,
+
+      costCurrency: (map['costCurrency'] as String?) ?? 'bob',
+      costUsd: d(map['costUsd']),
+      usdRate: d(map['usdRate']),
+      usdRateUpdatedAtMs: map['usdRateUpdatedAtMs'] as int?,
+      usdRateSource: (map['usdRateSource'] as String?) ?? 'bo.dolarapi/binance',
+
+      protectMargin: (map['protectMargin'] ?? false) as bool,
+      protectedUsdRateAtSave: d(map['protectedUsdRateAtSave']),
     );
   }
+
+  Map<String, dynamic> toJson() => toMap();
+  factory InventoryItem.fromJson(Map<String, dynamic> map) =>
+      InventoryItem.fromMap(map);
 }
