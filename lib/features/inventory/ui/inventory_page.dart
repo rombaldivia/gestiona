@@ -18,7 +18,12 @@ class InventoryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ent = EntitlementsScope.of(context);
-    final proCloud = ent.tier == PlanTier.pro && ent.cloudSync;
+
+    // ✅ PRO real (para features locales como SKU + margen)
+    final isPro = ent.tier == PlanTier.pro;
+
+    // ✅ PRO + CloudSync (para features que realmente dependan de cloud/dólar/sync)
+    final proCloud = isPro && ent.cloudSync;
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -180,7 +185,6 @@ class InventoryPage extends ConsumerWidget {
                                   trailing: PopupMenuButton<String>(
                                     onSelected: (v) async {
                                       if (v == 'restock') {
-                                        // GRATIS: solo stock (reposicion / ajuste entrada)
                                         await _askRestockStockOnly(
                                           context,
                                           ctrl,
@@ -188,7 +192,6 @@ class InventoryPage extends ConsumerWidget {
                                           item,
                                         );
                                       } else if (v == 'purchase') {
-                                        // PRO: stock + costo de adquisición con tasa dólar
                                         if (!proCloud || uid == null) return;
                                         await _askPurchaseStockAndCost(
                                           context: context,
@@ -209,14 +212,14 @@ class InventoryPage extends ConsumerWidget {
                                       } else if (v == 'edit') {
                                         final edited =
                                             await Navigator.push<InventoryItem>(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    InventoryItemFormPage(
-                                                      initial: item,
-                                                    ),
-                                              ),
-                                            );
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => InventoryItemFormPage(
+                                              initial: item,
+                                              proCloud: isPro, // ✅ SOLO PRO (SKU + margen)
+                                            ),
+                                          ),
+                                        );
                                         if (edited != null) {
                                           await ctrl.upsertItem(
                                             item: edited,
@@ -228,9 +231,8 @@ class InventoryPage extends ConsumerWidget {
                                           context: context,
                                           builder: (_) => AlertDialog(
                                             title: const Text('Eliminar ítem'),
-                                            content: Text(
-                                              '¿Eliminar "${item.name}"?',
-                                            ),
+                                            content:
+                                                Text('¿Eliminar "${item.name}"?'),
                                             actions: [
                                               TextButton(
                                                 onPressed: () => Navigator.pop(
@@ -271,7 +273,6 @@ class InventoryPage extends ConsumerWidget {
                                         ];
                                       }
 
-                                      // No-service: inventario normal
                                       return [
                                         const PopupMenuItem(
                                           value: 'restock',
@@ -280,9 +281,7 @@ class InventoryPage extends ConsumerWidget {
                                         if (proCloud)
                                           const PopupMenuItem(
                                             value: 'purchase',
-                                            child: Text(
-                                              'Compra / reposición (PRO)',
-                                            ),
+                                            child: Text('Compra / reposición (PRO)'),
                                           ),
                                         const PopupMenuDivider(),
                                         const PopupMenuItem(
@@ -316,7 +315,11 @@ class InventoryPage extends ConsumerWidget {
         onPressed: () async {
           final created = await Navigator.push<InventoryItem>(
             context,
-            MaterialPageRoute(builder: (_) => const InventoryItemFormPage()),
+            MaterialPageRoute(
+              builder: (_) => InventoryItemFormPage(
+                proCloud: isPro, // ✅ SOLO PRO (SKU + margen)
+              ),
+            ),
           );
           if (created != null) {
             await ctrl.upsertItem(item: created, ent: ent);
@@ -431,7 +434,6 @@ Future<void> _askAdjust(
   );
 }
 
-/// GRATIS: botón explícito "Actualizar stock" (equivale a entrada positiva, sin tocar costo).
 Future<void> _askRestockStockOnly(
   BuildContext context,
   InventoryController ctrl,
@@ -502,13 +504,8 @@ Future<void> _askRestockStockOnly(
 }
 
 enum _RateMode { savedBase, currentBinance }
-
 enum _CostCurrency { bob, usd }
 
-/// PRO: Compra / reposición -> stock + costo de adquisición.
-/// Permite elegir:
-/// - usar tasa base guardada (savedBase)
-/// - o traer tasa actual (currentBinance)
 Future<void> _askPurchaseStockAndCost({
   required BuildContext context,
   required WidgetRef ref,
@@ -518,265 +515,161 @@ Future<void> _askPurchaseStockAndCost({
   required InventoryItem item,
 }) async {
   final qtyC = TextEditingController();
-  final noteC = TextEditingController();
   final costC = TextEditingController();
+  final noteC = TextEditingController();
 
   var rateMode = _RateMode.savedBase;
-  var currency = _CostCurrency.usd;
+  var currency = _CostCurrency.bob;
 
-  double? savedBaseRate;
-  double? liveRate; // binance (solo si el usuario la pide)
-  bool fetchingRate = false;
+  double? fetchedRate;
 
-  double? parseNum(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
-
-  Future<double?> getSavedBaseRate() async {
-    final st = await ref.read(dollarProtectionProvider(uid).future);
-    return st.baseRate;
-  }
-
-  Future<double?> getLiveRate() async {
-    final repo = ref.read(dollarRepositoryProvider);
-    final r = await repo.fetchLastRate();
-    return r;
-  }
-
-  String rateLabel() {
-    final v = (rateMode == _RateMode.savedBase) ? savedBaseRate : liveRate;
-    if (v == null) return '—';
-    return v.toStringAsFixed(2);
-  }
-
-  double? computeCostBob() {
-    final qty = parseNum(qtyC.text);
-    final unitCost = parseNum(costC.text);
-    if (qty == null || qty <= 0) return null;
-    if (unitCost == null || unitCost <= 0) return null;
-
-    final rate = (rateMode == _RateMode.savedBase) ? savedBaseRate : liveRate;
-    if (currency == _CostCurrency.usd) {
-      if (rate == null || rate <= 0) return null;
-      return unitCost * rate; // costo unitario en Bs
-    }
-    return unitCost; // ya está en Bs
-  }
-
-  final res = await showDialog<(double qty, double costBob, String? note)>(
+  final res = await showDialog<(double, double, String?, double?, _CostCurrency)>(
     context: context,
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (ctx, setState) {
-          return AlertDialog(
-            title: const Text('Compra / reposición (PRO)'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
+    builder: (_) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Compra / reposición'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: qtyC,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: 'Cantidad', suffixText: item.unit),
+            ),
+            const SizedBox(height: 10),
+            Row(
               children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-
-                TextField(
-                  controller: qtyC,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Cantidad comprada',
-                    suffixText: item.unit,
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Costo unitario (PRO)
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: costC,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Costo unitario',
-                          suffixText: currency == _CostCurrency.usd
-                              ? 'USD'
-                              : 'Bs',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    DropdownButton<_CostCurrency>(
-                      value: currency,
-                      items: const [
-                        DropdownMenuItem(
-                          value: _CostCurrency.usd,
-                          child: Text('USD'),
-                        ),
-                        DropdownMenuItem(
-                          value: _CostCurrency.bob,
-                          child: Text('Bs'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => currency = v);
-                      },
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-
-                // Tasa (si costo está en USD)
-                if (currency == _CostCurrency.usd) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButton<_RateMode>(
-                          value: rateMode,
-                          isExpanded: true,
-                          items: const [
-                            DropdownMenuItem(
-                              value: _RateMode.savedBase,
-                              child: Text('Usar mi tasa base guardada'),
-                            ),
-                            DropdownMenuItem(
-                              value: _RateMode.currentBinance,
-                              child: Text('Usar tasa actual (Binance)'),
-                            ),
-                          ],
-                          onChanged: (v) async {
-                            if (v == null) return;
-
-                            setState(() => rateMode = v);
-
-                            // Lazy-load de tasas
-                            if (v == _RateMode.savedBase &&
-                                savedBaseRate == null) {
-                              setState(() => fetchingRate = true);
-                              try {
-                                savedBaseRate = await getSavedBaseRate();
-                              } finally {
-                                setState(() => fetchingRate = false);
-                              }
-                            }
-
-                            if (v == _RateMode.currentBinance &&
-                                liveRate == null) {
-                              setState(() => fetchingRate = true);
-                              try {
-                                liveRate = await getLiveRate();
-                              } finally {
-                                setState(() => fetchingRate = false);
-                              }
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      if (fetchingRate)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Text(
-                          rateLabel(),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
+                Expanded(
+                  child: DropdownButtonFormField<_CostCurrency>(
+                    initialValue: currency,
+                    decoration: const InputDecoration(labelText: 'Moneda costo'),
+                    items: const [
+                      DropdownMenuItem(value: _CostCurrency.bob, child: Text('Bs')),
+                      DropdownMenuItem(value: _CostCurrency.usd, child: Text('USD')),
                     ],
+                    onChanged: (v) => setState(() => currency = v ?? _CostCurrency.bob),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Costo se guardará en Bs. (conversión automática)',
-                    style: Theme.of(ctx).textTheme.bodySmall,
-                  ),
-                ],
-
-                const SizedBox(height: 10),
-                TextField(
-                  controller: noteC,
-                  decoration: const InputDecoration(
-                    labelText: 'Nota (opcional)',
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: costC,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: currency == _CostCurrency.usd
+                          ? 'Costo unitario (USD)'
+                          : 'Costo unitario (Bs)',
+                    ),
                   ),
                 ),
               ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final qty = parseNum(qtyC.text);
-                  if (qty == null || qty <= 0) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Cantidad inválida.')),
-                    );
-                    return;
-                  }
-
-                  // Costo unitario en Bs
-                  if (currency == _CostCurrency.usd) {
-                    // asegúrate de tener tasa cargada
-                    if (rateMode == _RateMode.savedBase &&
-                        savedBaseRate == null) {
-                      setState(() => fetchingRate = true);
-                      try {
-                        savedBaseRate = await getSavedBaseRate();
-                      } finally {
-                        setState(() => fetchingRate = false);
-                      }
-                    }
-                    if (rateMode == _RateMode.currentBinance &&
-                        liveRate == null) {
-                      setState(() => fetchingRate = true);
-                      try {
-                        liveRate = await getLiveRate();
-                      } finally {
-                        setState(() => fetchingRate = false);
-                      }
+            const SizedBox(height: 10),
+            if (currency == _CostCurrency.usd) ...[
+              DropdownButtonFormField<_RateMode>(
+                initialValue: rateMode,
+                decoration: const InputDecoration(labelText: 'Tasa USD→Bs'),
+                items: const [
+                  DropdownMenuItem(
+                    value: _RateMode.savedBase,
+                    child: Text('Usar tasa base guardada'),
+                  ),
+                  DropdownMenuItem(
+                    value: _RateMode.currentBinance,
+                    child: Text('Traer tasa actual (Binance)'),
+                  ),
+                ],
+                onChanged: (v) async {
+                  final m = v ?? _RateMode.savedBase;
+                  setState(() => rateMode = m);
+                  if (m == _RateMode.currentBinance) {
+                    try {
+                      final repo = ref.read(dollarRepositoryProvider);
+                      final r = await repo.fetchLastRate();
+                      setState(() => fetchedRate = r);
+                    } catch (_) {
+                      setState(() => fetchedRate = null);
                     }
                   }
-                  if (!ctx.mounted) return;
-
-                  final costBob = computeCostBob();
-                  if (costBob == null || costBob <= 0) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text('Costo inválido o falta tasa.'),
-                      ),
-                    );
-                    return;
-                  }
-
-                  final note = noteC.text.trim();
-                  Navigator.pop(ctx, (
-                    qty,
-                    costBob,
-                    note.isEmpty ? null : note,
-                  ));
                 },
-                child: const Text('Aplicar'),
               ),
+              const SizedBox(height: 8),
+              if (rateMode == _RateMode.currentBinance)
+                Text(
+                  fetchedRate == null
+                      ? 'No se pudo traer la tasa actual.'
+                      : 'Tasa actual: ${fetchedRate!.toStringAsFixed(2)} Bs/USD',
+                ),
             ],
-          );
-        },
-      );
-    },
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteC,
+              decoration: const InputDecoration(labelText: 'Nota (opcional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () {
+              final qty = double.tryParse(qtyC.text.trim().replaceAll(',', '.'));
+              if (qty == null || qty <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cantidad inválida.')),
+                );
+                return;
+              }
+
+              final unitCost = double.tryParse(costC.text.trim().replaceAll(',', '.'));
+              if (unitCost == null || unitCost <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Costo inválido.')),
+                );
+                return;
+              }
+
+              double? rate;
+              if (currency == _CostCurrency.usd) {
+                if (rateMode == _RateMode.currentBinance) {
+                  rate = fetchedRate;
+                } else {
+                  final baseState = ref.read(dollarProtectionProvider(uid));
+                  rate = baseState.maybeWhen(
+                    data: (d) => d.baseRate,
+                    orElse: () => null,
+                  );
+                }
+
+                if (rate == null || rate <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No hay tasa USD válida.')),
+                  );
+                  return;
+                }
+              }
+
+              final note = noteC.text.trim();
+              Navigator.pop(context, (qty, unitCost, note.isEmpty ? null : note, rate, currency));
+            },
+            child: const Text('Aplicar'),
+          ),
+        ],
+      ),
+    ),
   );
 
   if (res == null) return;
 
   final qty = res.$1;
-  final costUnitBob = res.$2;
+  final unitCost = res.$2;
   final note = res.$3;
+  final rate = res.$4;
+  final curr = res.$5;
 
-  // 1) Ajustar stock (entrada)
+  final costBob = (curr == _CostCurrency.usd && rate != null) ? (unitCost * rate) : unitCost;
+
   await ctrl.adjustStock(
     itemId: item.id,
     delta: qty,
@@ -785,10 +678,8 @@ Future<void> _askPurchaseStockAndCost({
     ent: ent,
   );
 
-  // 2) Guardar costo de adquisición (unitario en Bs)
-  // (simple: set directo; si luego quieres costo ponderado, lo hacemos)
   final updated = item.copyWith(
-    cost: costUnitBob,
+    cost: costBob,
     updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     dirty: true,
   );

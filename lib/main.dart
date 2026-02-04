@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/di/providers.dart';
@@ -13,13 +14,16 @@ Future<void> main() async {
   runApp(const ProviderScope(child: App()));
 }
 
-class App extends StatelessWidget {
+class App extends ConsumerWidget {
   const App({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authServiceProvider);
+    final authState = ref.watch(authStateProvider);
+
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2F6DAE), // azul calmado
+      seedColor: const Color(0xFF2F6DAE),
       brightness: Brightness.light,
     );
 
@@ -85,36 +89,46 @@ class App extends StatelessWidget {
           color: Color(0xFFE6EEF7),
         ),
       ),
-      home: const AuthGate(),
-    );
-  }
-}
 
-class AuthGate extends ConsumerWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authServiceProvider);
-    final authState = ref.watch(authStateProvider);
-
-    return authState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('Error de autenticación: $e'),
+      // ✅ AQUÍ está el fix: el scope envuelve TODAS las rutas del Navigator raíz
+      builder: (context, child) {
+        final w = child ?? const SizedBox.shrink();
+        return authState.when(
+          loading: () => const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
           ),
-        ),
-      ),
-      data: (user) {
-        if (user == null) return LoginPage(auth: auth);
-
-        return EntitlementsGate(user: user, child: CompanyGate(auth: auth, user: user),
+          error: (e, _) => Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Error de autenticación: $e'),
+              ),
+            ),
+          ),
+          data: (user) {
+            if (user == null) return w;
+            return EntitlementsGate(user: user, child: w);
+          },
         );
       },
+
+      // ✅ Home según sesión
+      home: authState.when(
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (e, _) => Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Error de autenticación: $e'),
+            ),
+          ),
+        ),
+        data: (User? user) {
+          if (user == null) return LoginPage(auth: auth);
+          return CompanyGate(auth: auth, user: user);
+        },
+      ),
     );
   }
 }
