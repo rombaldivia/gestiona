@@ -15,6 +15,10 @@ class Entitlements {
   bool get whatsappIntegration => tier == PlanTier.pro;
   bool get advancedReports => tier == PlanTier.pro;
 
+  // ✅ NUEVO: USD protector y PDF en cotizaciones
+  bool get usdProtector => tier == PlanTier.pro;
+  bool get quotePdfShare => tier == PlanTier.pro;
+
   // Límites
   int get maxCompanies => switch (tier) {
     PlanTier.free => 1,

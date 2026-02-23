@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../inventory/domain/inventory_item.dart';
 import '../../subscription/domain/entitlements.dart';
 import '../domain/quote.dart';
+import '../domain/quote_status.dart';
 import 'quotes_cloud_service.dart';
 import 'quotes_local_store.dart';
 
@@ -30,11 +32,8 @@ class QuotesOfflineFirstService {
     return _cloud.watchQuotes(companyId: companyId);
   }
 
-  /// Aplica cloud -> local (simple, sin dirty por ahora)
-  Future<void> applyCloudToLocal({
-    required List<Quote> cloudQuotes,
-  }) async {
-    // Merge simple: cloud gana por updatedAtMs
+  /// Aplica cloud -> local (simple: gana updatedAtMs más reciente)
+  Future<void> applyCloudToLocal({required List<Quote> cloudQuotes}) async {
     final local = await _local.loadAll();
     final map = {for (final q in local) q.id: q};
 
@@ -79,12 +78,58 @@ class QuotesOfflineFirstService {
     await _cloud.deleteQuote(companyId: companyId, quoteId: quoteId);
   }
 
-  // helper: reemplaza todo (QuotesLocalStore no tiene esto)
+  /// ✅ PRO: Actualiza snapshots en cotizaciones draft cuando cambie inventario.
+  /// Regla: SOLO draft (no toca cotizaciones históricas).
+  /// Actualiza: nombre/sku/unidad/costo/venta(Bs)
+  Future<int> refreshDraftQuotesFromInventory({
+    required List<InventoryItem> inventory,
+  }) async {
+    final invById = {for (final it in inventory) it.id: it};
+
+    final quotes = await _local.loadAll();
+    int changed = 0;
+
+    for (final q in quotes) {
+      if (q.status != QuoteStatus.draft) continue;
+
+      bool dirty = false;
+
+      final newLines = q.lines
+          .map((l) {
+            final itemId = l.inventoryItemId;
+            if (itemId == null) return l;
+
+            final it = invById[itemId];
+            if (it == null) return l;
+
+            final next = l.copyWith(
+              nameSnapshot: it.name,
+              skuSnapshot: it.sku,
+              unitSnapshot: it.unit,
+              costBobSnapshot: it.cost,
+              unitPriceBobSnapshot: it.salePrice,
+            );
+
+            if (next != l) dirty = true;
+            return next;
+          })
+          .toList(growable: false);
+
+      if (dirty) {
+        final updated = q.copyWith(
+          lines: newLines,
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+        await _local.upsert(updated);
+        changed++;
+      }
+    }
+
+    return changed;
+  }
+
+  // helper: reemplaza todo (simple y seguro)
   Future<void> _localReplaceAll(List<Quote> quotes) async {
-    // Reusa la clave interna del store guardando JSON completo
-    // sin exponer métodos nuevos
-    // → hacemos "upsert" uno a uno después de limpiar
-    // (simple y seguro)
     final existing = await _local.loadAll();
     for (final q in existing) {
       await _local.deleteById(q.id);

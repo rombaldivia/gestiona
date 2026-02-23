@@ -44,7 +44,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   @override
   void initState() {
     super.initState();
-    _customerCtrl = TextEditingController(text: widget.quote.customerName ?? '');
+    _customerCtrl = TextEditingController(
+      text: widget.quote.customerName ?? '',
+    );
     _notesCtrl = TextEditingController(text: widget.quote.notes ?? '');
     _phoneE164 = widget.quote.customerPhone ?? '';
     _lines = List<QuoteLine>.from(widget.quote.lines);
@@ -182,7 +184,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
           ? l.qty.toStringAsFixed(0)
           : l.qty.toStringAsFixed(2);
 
-      final sku = (l.skuSnapshot ?? '').trim().isEmpty ? '' : ' • SKU ${l.skuSnapshot}';
+      final sku = (l.skuSnapshot ?? '').trim().isEmpty
+          ? ''
+          : ' • SKU ${l.skuSnapshot}';
 
       sb.writeln('• ${l.nameSnapshot}$sku');
       sb.writeln(
@@ -208,7 +212,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   Future<void> _sendWhatsAppQuick() async {
     if (!_hasLines) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agrega al menos 1 ítem antes de enviar.')),
+        const SnackBar(
+          content: Text('Agrega al menos 1 ítem antes de enviar.'),
+        ),
       );
       return;
     }
@@ -229,7 +235,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     if (_sendingPdf) return;
     if (!_hasLines) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agrega al menos 1 ítem para generar el PDF.')),
+        const SnackBar(
+          content: Text('Agrega al menos 1 ítem para generar el PDF.'),
+        ),
       );
       return;
     }
@@ -237,7 +245,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     setState(() => _sendingPdf = true);
     try {
       final bytes = await _buildQuotePdfBytes();
-      final filename = 'cotizacion-${widget.quote.sequence}-${widget.quote.year}.pdf';
+      final filename =
+          'cotizacion-${widget.quote.sequence}-${widget.quote.year}.pdf';
       await Printing.sharePdf(bytes: bytes, filename: filename);
     } catch (e) {
       if (mounted) {
@@ -250,7 +259,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     }
   }
 
-   Future<Uint8List> _buildQuotePdfBytes() async {
+  Future<Uint8List> _buildQuotePdfBytes() async {
     final q = widget.quote.copyWith(
       customerName: _customerCtrl.text.trim(),
       customerPhone: _phoneE164.trim().isEmpty ? null : _phoneE164.trim(),
@@ -269,7 +278,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   void _openSendSheet() {
     if (!_hasLines) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agrega al menos 1 ítem antes de enviar.')),
+        const SnackBar(
+          content: Text('Agrega al menos 1 ítem antes de enviar.'),
+        ),
       );
       return;
     }
@@ -306,7 +317,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
               ListTile(
                 leading: const Icon(Icons.picture_as_pdf),
                 title: const Text('Enviar como PDF'),
-                subtitle: Text(_sendingPdf ? 'Generando…' : 'Compartir PDF por WhatsApp'),
+                subtitle: Text(
+                  _sendingPdf ? 'Generando…' : 'Compartir PDF por WhatsApp',
+                ),
                 onTap: _sendingPdf
                     ? null
                     : () async {
@@ -362,7 +375,10 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.w700)),
+                : const Text(
+                    'Guardar',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
           ),
         ],
       ),
@@ -380,20 +396,26 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 labelText: 'Nombre / Razón social *',
                 hintText: 'Ej: Ferretería López',
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
             ),
             const SizedBox(height: 12),
             IntlPhoneField(
               initialCountryCode: 'BO',
               initialValue: _phoneE164.replaceFirst('+591', ''),
-              decoration: const InputDecoration(labelText: 'WhatsApp / Teléfono'),
+              decoration: const InputDecoration(
+                labelText: 'WhatsApp / Teléfono',
+              ),
               onChanged: (p) => _phoneE164 = p.completeNumber,
               disableLengthCheck: true,
             ),
             const SizedBox(height: 20),
             Row(
               children: [
-                const _SectionHeader(icon: Icons.inventory_2_outlined, title: 'Ítems'),
+                const _SectionHeader(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Ítems',
+                ),
                 const Spacer(),
                 if (_hasUsdLines) ...[
                   FilledButton.tonalIcon(
@@ -407,7 +429,10 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                         : const Icon(Icons.currency_exchange, size: 18),
                     label: const Text('Recotizar USD'),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -424,7 +449,10 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
             const SizedBox(height: 10),
             if (_lines.isEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(16),
@@ -447,7 +475,10 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 ),
               ),
             const SizedBox(height: 20),
-            const _SectionHeader(icon: Icons.notes_outlined, title: 'Notas (opcional)'),
+            const _SectionHeader(
+              icon: Icons.notes_outlined,
+              title: 'Notas (opcional)',
+            ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _notesCtrl,
@@ -481,7 +512,13 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Total', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                    Text(
+                      'Total',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                     Text(
                       'Bs ${_total.toStringAsFixed(2)}',
                       style: TextStyle(
@@ -501,8 +538,13 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                   label: const Text('ENVIAR'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
               ),
