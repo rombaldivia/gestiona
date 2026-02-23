@@ -20,7 +20,7 @@ List<QuoteLine> processTemplateToQuoteLines({
   final now = DateTime.now().millisecondsSinceEpoch;
   final out = <QuoteLine>[];
 
-  String _joinNotes(String a, String? b) {
+  String joinNotes(String a, String? b) {
     final aa = a.trim();
     final bb = (b ?? '').trim();
     if (bb.isEmpty) return aa;
@@ -47,7 +47,7 @@ List<QuoteLine> processTemplateToQuoteLines({
 
     // metemos contexto del proceso en note para rastrear de dónde vino
     final baseNote = 'Proceso: ${template.name}';
-    final note = _joinNotes(baseNote, r.note);
+    final note = joinNotes(baseNote, r.note);
 
     out.add(
       QuoteLine(
