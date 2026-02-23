@@ -27,15 +27,20 @@ class QuotePdf {
             style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
-          pw.Text('Fecha: $dateStr', style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
+          pw.Text(
+            'Fecha: $dateStr',
+            style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700),
+          ),
           pw.SizedBox(height: 10),
           pw.Text(
             'Cliente: ${(quote.customerName ?? '').trim().isEmpty ? '(Sin nombre)' : quote.customerName!.trim()}',
             style: pw.TextStyle(fontSize: 11.5),
           ),
           if ((quote.customerPhone ?? '').trim().isNotEmpty)
-            pw.Text('Tel: ${quote.customerPhone!.trim()}',
-                style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
+            pw.Text(
+              'Tel: ${quote.customerPhone!.trim()}',
+              style: pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700),
+            ),
           pw.SizedBox(height: 16),
 
           pw.TableHelper.fromTextArray(
@@ -57,7 +62,9 @@ class QuotePdf {
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.white,
             ),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.blueGrey800,
+            ),
             cellStyle: const pw.TextStyle(fontSize: 10.5),
             cellAlignments: {
               0: pw.Alignment.centerLeft,
@@ -78,7 +85,10 @@ class QuotePdf {
 
           if ((quote.notes ?? '').trim().isNotEmpty) ...[
             pw.SizedBox(height: 14),
-            pw.Text('Notas:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            pw.Text(
+              'Notas:',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
             pw.SizedBox(height: 4),
             pw.Text(quote.notes!.trim()),
           ],

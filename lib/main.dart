@@ -94,9 +94,8 @@ class App extends ConsumerWidget {
       builder: (context, child) {
         final w = child ?? const SizedBox.shrink();
         return authState.when(
-          loading: () => const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
+          loading: () =>
+              const Scaffold(body: Center(child: CircularProgressIndicator())),
           error: (e, _) => Scaffold(
             body: Center(
               child: Padding(
