@@ -209,13 +209,18 @@ class _ProcessesPageState extends State<ProcessesPage> {
                       ),
                       PopupMenuButton<String>(
                         onSelected: (v) async {
+                          Navigator.pop(ctx);
+
                           if (v == 'rename') {
-                            Navigator.pop(ctx);
                             await _rename(t);
+                            if (!mounted) return;
+                            await _reload();
                           }
+
                           if (v == 'delete') {
-                            Navigator.pop(ctx);
                             await _delete(t);
+                            if (!mounted) return;
+                            await _reload();
                           }
                         },
                         itemBuilder: (_) => const [
