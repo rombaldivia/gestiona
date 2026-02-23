@@ -5,7 +5,7 @@ import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 import '../../inventory/ui/inventory_page.dart';
-import '../../quotes/ui/quotes_page.dart';
+import '../../quotes/ui/quotes_tabs_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -121,7 +121,7 @@ class HomePage extends StatelessWidget {
                   buttonText: 'Crear cotización',
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const QuotesPage()),
+                      MaterialPageRoute(builder: (_) => const QuotesTabsPage()),
                     );
                   },
                 ),

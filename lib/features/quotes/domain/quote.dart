@@ -1,5 +1,6 @@
 import 'quote_line.dart';
 import 'quote_status.dart';
+import 'quote_step.dart';
 
 class Quote {
   Quote({
@@ -14,6 +15,7 @@ class Quote {
     this.notes,
     required this.currency,
     required this.lines,
+    this.steps = const [],
     this.sourceQuoteId,
     this.sourceMode, // "duplicate" | "requote"
   });
@@ -31,14 +33,14 @@ class Quote {
   final QuoteStatus status;
 
   final String? customerName;
-
-  /// ✅ nuevo: para WhatsApp
   final String? customerPhone;
-
   final String? notes;
 
   final String currency; // "BOB" por ahora
   final List<QuoteLine> lines;
+
+  /// ✅ Proceso dentro de la cotización
+  final List<QuoteProcessStep> steps;
 
   // versionado
   final String? sourceQuoteId;
@@ -59,6 +61,7 @@ class Quote {
     String? notes,
     String? currency,
     List<QuoteLine>? lines,
+    List<QuoteProcessStep>? steps,
     String? sourceQuoteId,
     String? sourceMode,
   }) {
@@ -74,31 +77,38 @@ class Quote {
       notes: notes ?? this.notes,
       currency: currency ?? this.currency,
       lines: lines ?? this.lines,
+      steps: steps ?? this.steps,
       sourceQuoteId: sourceQuoteId ?? this.sourceQuoteId,
       sourceMode: sourceMode ?? this.sourceMode,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'sequence': sequence,
-        'year': year,
-        'createdAtMs': createdAtMs,
-        'updatedAtMs': updatedAtMs,
-        'status': status.name,
-        'customerName': customerName,
-        'customerPhone': customerPhone,
-        'notes': notes,
-        'currency': currency,
-        'lines': lines.map((e) => e.toJson()).toList(),
-        'sourceQuoteId': sourceQuoteId,
-        'sourceMode': sourceMode,
-      };
+    'id': id,
+    'sequence': sequence,
+    'year': year,
+    'createdAtMs': createdAtMs,
+    'updatedAtMs': updatedAtMs,
+    'status': status.name,
+    'customerName': customerName,
+    'customerPhone': customerPhone,
+    'notes': notes,
+    'currency': currency,
+    'lines': lines.map((e) => e.toJson()).toList(),
+    'steps': steps.map((e) => e.toJson()).toList(),
+    'sourceQuoteId': sourceQuoteId,
+    'sourceMode': sourceMode,
+  };
 
   factory Quote.fromJson(Map<String, dynamic> m) {
     final lines = (m['lines'] as List? ?? const [])
         .cast<Map<String, dynamic>>()
         .map((e) => QuoteLine.fromJson(e))
+        .toList();
+
+    final steps = (m['steps'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map((e) => QuoteProcessStep.fromJson(e))
         .toList();
 
     int toIntSafe(dynamic v, int fallback) =>
@@ -116,6 +126,7 @@ class Quote {
       notes: m['notes']?.toString(),
       currency: (m['currency'] ?? 'BOB').toString(),
       lines: lines,
+      steps: steps,
       sourceQuoteId: m['sourceQuoteId']?.toString(),
       sourceMode: m['sourceMode']?.toString(),
     );
