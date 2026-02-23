@@ -25,5 +25,6 @@ class SyncModeController extends AsyncNotifier<SyncMode> {
   }
 }
 
-final syncModeProvider =
-    AsyncNotifierProvider<SyncModeController, SyncMode>(SyncModeController.new);
+final syncModeProvider = AsyncNotifierProvider<SyncModeController, SyncMode>(
+  SyncModeController.new,
+);

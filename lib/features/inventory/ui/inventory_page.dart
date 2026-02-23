@@ -212,14 +212,16 @@ class InventoryPage extends ConsumerWidget {
                                       } else if (v == 'edit') {
                                         final edited =
                                             await Navigator.push<InventoryItem>(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => InventoryItemFormPage(
-                                              initial: item,
-                                              proCloud: isPro, // ✅ SOLO PRO (SKU + margen)
-                                            ),
-                                          ),
-                                        );
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    InventoryItemFormPage(
+                                                      initial: item,
+                                                      proCloud:
+                                                          isPro, // ✅ SOLO PRO (SKU + margen)
+                                                    ),
+                                              ),
+                                            );
                                         if (edited != null) {
                                           await ctrl.upsertItem(
                                             item: edited,
@@ -231,8 +233,9 @@ class InventoryPage extends ConsumerWidget {
                                           context: context,
                                           builder: (_) => AlertDialog(
                                             title: const Text('Eliminar ítem'),
-                                            content:
-                                                Text('¿Eliminar "${item.name}"?'),
+                                            content: Text(
+                                              '¿Eliminar "${item.name}"?',
+                                            ),
                                             actions: [
                                               TextButton(
                                                 onPressed: () => Navigator.pop(
@@ -281,7 +284,9 @@ class InventoryPage extends ConsumerWidget {
                                         if (proCloud)
                                           const PopupMenuItem(
                                             value: 'purchase',
-                                            child: Text('Compra / reposición (PRO)'),
+                                            child: Text(
+                                              'Compra / reposición (PRO)',
+                                            ),
                                           ),
                                         const PopupMenuDivider(),
                                         const PopupMenuItem(
@@ -504,6 +509,7 @@ Future<void> _askRestockStockOnly(
 }
 
 enum _RateMode { savedBase, currentBinance }
+
 enum _CostCurrency { bob, usd }
 
 Future<void> _askPurchaseStockAndCost({
@@ -531,12 +537,20 @@ Future<void> _askPurchaseStockAndCost({
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              item.name,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: qtyC,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: 'Cantidad', suffixText: item.unit),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Cantidad',
+                suffixText: item.unit,
+              ),
             ),
             const SizedBox(height: 10),
             Row(
@@ -544,19 +558,30 @@ Future<void> _askPurchaseStockAndCost({
                 Expanded(
                   child: DropdownButtonFormField<_CostCurrency>(
                     initialValue: currency,
-                    decoration: const InputDecoration(labelText: 'Moneda costo'),
+                    decoration: const InputDecoration(
+                      labelText: 'Moneda costo',
+                    ),
                     items: const [
-                      DropdownMenuItem(value: _CostCurrency.bob, child: Text('Bs')),
-                      DropdownMenuItem(value: _CostCurrency.usd, child: Text('USD')),
+                      DropdownMenuItem(
+                        value: _CostCurrency.bob,
+                        child: Text('Bs'),
+                      ),
+                      DropdownMenuItem(
+                        value: _CostCurrency.usd,
+                        child: Text('USD'),
+                      ),
                     ],
-                    onChanged: (v) => setState(() => currency = v ?? _CostCurrency.bob),
+                    onChanged: (v) =>
+                        setState(() => currency = v ?? _CostCurrency.bob),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: costC,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: currency == _CostCurrency.usd
                           ? 'Costo unitario (USD)'
@@ -611,10 +636,15 @@ Future<void> _askPurchaseStockAndCost({
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () {
-              final qty = double.tryParse(qtyC.text.trim().replaceAll(',', '.'));
+              final qty = double.tryParse(
+                qtyC.text.trim().replaceAll(',', '.'),
+              );
               if (qty == null || qty <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Cantidad inválida.')),
@@ -622,7 +652,9 @@ Future<void> _askPurchaseStockAndCost({
                 return;
               }
 
-              final unitCost = double.tryParse(costC.text.trim().replaceAll(',', '.'));
+              final unitCost = double.tryParse(
+                costC.text.trim().replaceAll(',', '.'),
+              );
               if (unitCost == null || unitCost <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Costo inválido.')),
@@ -651,7 +683,13 @@ Future<void> _askPurchaseStockAndCost({
               }
 
               final note = noteC.text.trim();
-              Navigator.pop(context, (qty, unitCost, note.isEmpty ? null : note, rate, currency));
+              Navigator.pop(context, (
+                qty,
+                unitCost,
+                note.isEmpty ? null : note,
+                rate,
+                currency,
+              ));
             },
             child: const Text('Aplicar'),
           ),
@@ -668,7 +706,9 @@ Future<void> _askPurchaseStockAndCost({
   final rate = res.$4;
   final curr = res.$5;
 
-  final costBob = (curr == _CostCurrency.usd && rate != null) ? (unitCost * rate) : unitCost;
+  final costBob = (curr == _CostCurrency.usd && rate != null)
+      ? (unitCost * rate)
+      : unitCost;
 
   await ctrl.adjustStock(
     itemId: item.id,

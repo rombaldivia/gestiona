@@ -8,8 +8,8 @@ import '../domain/plan_tier.dart';
 
 class EntitlementsRepository {
   EntitlementsRepository({FirebaseAuth? auth, FirebaseFirestore? db})
-      : _auth = auth ?? FirebaseAuth.instance,
-        _db = db ?? FirebaseFirestore.instance;
+    : _auth = auth ?? FirebaseAuth.instance,
+      _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;

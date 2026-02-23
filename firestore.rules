@@ -26,57 +26,49 @@ service cloud.firestore {
       return isMemberSub(companyId) || isMemberTop(companyId);
     }
 
-    // users/{uid}  ✅ FIX: el usuario NO puede cambiar su plan
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
 
-      // Crear doc de usuario: plan SOLO puede ser 'free' (o no venir)
       allow create: if signedIn()
         && request.auth.uid == uid
         && (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
 
-      // Actualizar doc: plan INMUTABLE desde cliente
       allow update: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.plan == resource.data.plan;
 
-      // Recomendado: no permitir borrar el doc de usuario desde cliente
       allow delete: if false;
     }
 
-    // companies/{companyId}
     match /companies/{companyId} {
 
-      // crear company
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid;
 
-      // members SOLO leen; owner actualiza/borrar
       allow read: if signedIn() && (isOwner(companyId) || isMember(companyId));
       allow update, delete: if signedIn() && isOwner(companyId);
 
-      // members subcolección
       match /members/{uid} {
         allow read: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
         allow create, delete: if signedIn() && isOwner(companyId);
         allow update: if false;
       }
 
-      // INVENTORY ITEMS
       match /inventory_items/{docId} {
         allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
       }
 
-      // STOCK MOVEMENTS
       match /stock_movements/{docId} {
+        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      }
+
+      // ✅ NUEVO: QUOTES
+      match /quotes/{quoteId} {
         allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
       }
     }
 
-    // members top-level: company_members/{uid_companyId}
     match /company_members/{memberDoc} {
-
-      // SOLO el owner puede crear membresías
       allow create: if signedIn()
         && request.resource.data.companyId is string
         && request.resource.data.uid is string
@@ -92,7 +84,6 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // deny todo lo demás
     match /{document=**} {
       allow read, write: if false;
     }
