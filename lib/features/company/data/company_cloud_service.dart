@@ -6,11 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 ///
 /// Esto evita "permission denied" en subcolecciones que dependen de ownerUid.
 class CompanyCloudService {
-  CompanyCloudService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  })  : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  CompanyCloudService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;

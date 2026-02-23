@@ -57,13 +57,13 @@ class InventoryItem {
     // PRO: protector
     this.protectMargin = false,
     num? protectedUsdRateAtSave,
-  })  : salePrice = salePrice?.toDouble(),
-        cost = cost?.toDouble(),
-        stock = stock.toDouble(),
-        minStock = minStock?.toDouble(),
-        costUsd = costUsd?.toDouble(),
-        usdRate = usdRate?.toDouble(),
-        protectedUsdRateAtSave = protectedUsdRateAtSave?.toDouble();
+  }) : salePrice = salePrice?.toDouble(),
+       cost = cost?.toDouble(),
+       stock = stock.toDouble(),
+       minStock = minStock?.toDouble(),
+       costUsd = costUsd?.toDouble(),
+       usdRate = usdRate?.toDouble(),
+       protectedUsdRateAtSave = protectedUsdRateAtSave?.toDouble();
 
   final String id;
   final String name;

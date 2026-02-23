@@ -26,10 +26,14 @@ class DolarApiClient {
       final ventaRaw = jsonObj['venta'];
       final fechaRaw = jsonObj['fechaActualizacion'];
 
-      final venta = (ventaRaw is num) ? ventaRaw.toDouble() : double.tryParse('$ventaRaw');
+      final venta = (ventaRaw is num)
+          ? ventaRaw.toDouble()
+          : double.tryParse('$ventaRaw');
       if (venta == null) throw const FormatException('Campo "venta" inválido');
 
-      final fecha = (fechaRaw is String && fechaRaw.isNotEmpty) ? fechaRaw : DateTime.now().toUtc().toIso8601String();
+      final fecha = (fechaRaw is String && fechaRaw.isNotEmpty)
+          ? fechaRaw
+          : DateTime.now().toUtc().toIso8601String();
 
       return DollarRate(venta: venta, updatedAtIso: fecha, source: 'binance');
     } finally {

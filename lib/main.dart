@@ -90,7 +90,7 @@ class App extends ConsumerWidget {
         ),
       ),
 
-      // ✅ AQUÍ está el fix: el scope envuelve TODAS las rutas del Navigator raíz
+      // ✅ El scope envuelve TODAS las rutas del Navigator raíz
       builder: (context, child) {
         final w = child ?? const SizedBox.shrink();
         return authState.when(

@@ -73,7 +73,9 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     // ✅ IMPORTACIÓN AUTOMÁTICA (si tu offline-first lo soporta)
     if (ent.cloudSync) {
       _cloudSub?.cancel();
-      _cloudSub = _service.watchCloudItems(companyId: cid).listen((cloudItems) async {
+      _cloudSub = _service.watchCloudItems(companyId: cid).listen((
+        cloudItems,
+      ) async {
         await _service.applyCloudToLocal(
           companyId: cid,
           cloudItems: cloudItems,

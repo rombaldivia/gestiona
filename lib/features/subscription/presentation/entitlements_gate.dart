@@ -7,11 +7,12 @@ import '../domain/plan_tier.dart';
 import 'entitlements_providers.dart';
 import 'entitlements_scope.dart';
 
-typedef EntitlementsWidgetBuilder = Widget Function(
-  BuildContext context,
-  Entitlements entitlements,
-  Widget child,
-);
+typedef EntitlementsWidgetBuilder =
+    Widget Function(
+      BuildContext context,
+      Entitlements entitlements,
+      Widget child,
+    );
 
 class EntitlementsGate extends ConsumerWidget {
   const EntitlementsGate({
@@ -64,10 +65,8 @@ class EntitlementsGate extends ConsumerWidget {
 
     // ✅ Si hay builder, también envolvemos con scope (por consistencia).
     return entAsync.when(
-      data: (e) => EntitlementsScope(
-        entitlements: e,
-        child: b(context, e, child),
-      ),
+      data: (e) =>
+          EntitlementsScope(entitlements: e, child: b(context, e, child)),
       loading: () => EntitlementsScope(
         entitlements: Entitlements.forTier(PlanTier.free),
         child: child,

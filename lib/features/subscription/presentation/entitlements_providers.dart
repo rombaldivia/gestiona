@@ -12,7 +12,10 @@ final entitlementsRepositoryProvider = Provider<EntitlementsRepository>((ref) {
 });
 
 // Provider por UID (String)
-final entitlementsProvider = StreamProvider.family<Entitlements, String>((ref, uid) {
+final entitlementsProvider = StreamProvider.family<Entitlements, String>((
+  ref,
+  uid,
+) {
   const forcePro = bool.fromEnvironment('FORCE_PRO', defaultValue: false);
 
   if (forcePro) {

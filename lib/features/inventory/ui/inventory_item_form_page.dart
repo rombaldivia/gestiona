@@ -117,7 +117,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
       if (_usdRate != null) _usdRateManual.text = _usdRate!.toStringAsFixed(2);
 
       if (it.usdRateUpdatedAtMs != null) {
-        _usdRateAt = DateTime.fromMillisecondsSinceEpoch(it.usdRateUpdatedAtMs!);
+        _usdRateAt = DateTime.fromMillisecondsSinceEpoch(
+          it.usdRateUpdatedAtMs!,
+        );
       }
 
       _protectMargin = it.protectMargin;
@@ -172,9 +174,8 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     _updating = false;
   }
 
-  String _fmtMoney(double v) => (v == v.roundToDouble())
-      ? v.toInt().toString()
-      : v.toStringAsFixed(2);
+  String _fmtMoney(double v) =>
+      (v == v.roundToDouble()) ? v.toInt().toString() : v.toStringAsFixed(2);
 
   String _fmtPct(double v) {
     if (v.isNaN || v.isInfinite) return '';
@@ -335,7 +336,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
       final venta = data['venta'];
       final fecha = data['fechaActualizacion'];
 
-      final rate = (venta is num) ? venta.toDouble() : double.tryParse('$venta');
+      final rate = (venta is num)
+          ? venta.toDouble()
+          : double.tryParse('$venta');
       final dt = (fecha is String) ? DateTime.tryParse(fecha) : null;
 
       if (rate == null || rate <= 0) {
@@ -356,7 +359,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Tasa Binance: ${rate.toStringAsFixed(2)} Bs/USD')),
+        SnackBar(
+          content: Text('Tasa Binance: ${rate.toStringAsFixed(2)} Bs/USD'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -371,9 +376,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nombre requerido.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nombre requerido.')));
       return;
     }
 
@@ -381,8 +386,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     final id = _it?.id ?? 'p_$now';
 
     final skuText = _sku.text.trim();
-    final sku =
-        (_effectivePro && _useSku && skuText.isNotEmpty) ? skuText : null;
+    final sku = (_effectivePro && _useSku && skuText.isNotEmpty)
+        ? skuText
+        : null;
 
     final price = _parseDouble(_price);
 
@@ -403,7 +409,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
         if (costUsd != null && costUsd > 0) {
           if (usdRate == null || usdRate <= 0) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Falta tasa USD→Bs. Usa Binance o manual.')),
+              const SnackBar(
+                content: Text('Falta tasa USD→Bs. Usa Binance o manual.'),
+              ),
             );
             return;
           }
@@ -419,7 +427,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
         if (_effectivePro && _protectMargin) {
           if (usdRate == null || usdRate <= 0) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Activas USD Protector, pero falta tasa.')),
+              const SnackBar(
+                content: Text('Activas USD Protector, pero falta tasa.'),
+              ),
             );
             return;
           }
@@ -467,14 +477,13 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
         ? _effectiveCostBobForMath()
         : null;
 
-    final showUsdProtector = _effectivePro && _kind != InventoryItemKind.servicio;
+    final showUsdProtector =
+        _effectivePro && _kind != InventoryItemKind.servicio;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
-        actions: [
-          TextButton(onPressed: _save, child: const Text('Guardar')),
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Guardar'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -484,7 +493,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
             ),
             child: Text(
               'DEBUG: effectivePro=$_effectivePro | kind=${_kind.label} | costCurrency=$_costCurrency | usdRate=${_usdRate?.toStringAsFixed(2) ?? "null"} | source=$_usdRateSource | protectMargin=$_protectMargin',
@@ -503,7 +514,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                 value: _kind,
                 isExpanded: true,
                 items: InventoryItemKind.values
-                    .map((k) => DropdownMenuItem(value: k, child: Text(k.label)))
+                    .map(
+                      (k) => DropdownMenuItem(value: k, child: Text(k.label)),
+                    )
                     .toList(),
                 onChanged: (v) {
                   if (v == null) return;
@@ -514,12 +527,20 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           ),
           const SizedBox(height: 12),
 
-          TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nombre')),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Nombre'),
+          ),
           const SizedBox(height: 12),
 
           Row(
             children: [
-              const Expanded(child: Text('SKU', style: TextStyle(fontWeight: FontWeight.w700))),
+              const Expanded(
+                child: Text(
+                  'SKU',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
               Row(
                 children: [
                   Text(_effectivePro ? 'Usar SKU' : 'Usar SKU (PRO)'),
@@ -538,7 +559,10 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             ],
           ),
           if (_useSku && _effectivePro) ...[
-            TextField(controller: _sku, decoration: const InputDecoration(labelText: 'SKU del ítem')),
+            TextField(
+              controller: _sku,
+              decoration: const InputDecoration(labelText: 'SKU del ítem'),
+            ),
             const SizedBox(height: 12),
           ] else ...[
             const SizedBox(height: 12),
@@ -547,7 +571,10 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_supportsStock) ...[
             TextField(
               controller: _unit,
-              decoration: const InputDecoration(labelText: 'Unidad (opcional)', hintText: 'u, kg, m...'),
+              decoration: const InputDecoration(
+                labelText: 'Unidad (opcional)',
+                hintText: 'u, kg, m...',
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -555,7 +582,12 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_kind == InventoryItemKind.servicio) ...[
             Row(
               children: [
-                const Expanded(child: Text('Cobro', style: TextStyle(fontWeight: FontWeight.w700))),
+                const Expanded(
+                  child: Text(
+                    'Cobro',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
                 Row(
                   children: [
                     const Text('Por hora'),
@@ -607,15 +639,23 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             if (!_effectivePro || _costCurrency == 'bob') ...[
               TextField(
                 controller: _costBob,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Costo (Bs) (opcional)'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Costo (Bs) (opcional)',
+                ),
               ),
               const SizedBox(height: 12),
             ] else ...[
               TextField(
                 controller: _costUsd,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Costo (USD) (PRO)'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Costo (USD) (PRO)',
+                ),
               ),
               const SizedBox(height: 12),
             ],
@@ -626,12 +666,21 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             Row(
               children: [
                 const Expanded(
-                  child: Text('USD Protector (PRO)', style: TextStyle(fontWeight: FontWeight.w800)),
+                  child: Text(
+                    'USD Protector (PRO)',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
                 FilledButton.icon(
-                  onPressed: _fetchingRate ? null : () => _fetchBinanceRate(applyProtector: true),
+                  onPressed: _fetchingRate
+                      ? null
+                      : () => _fetchBinanceRate(applyProtector: true),
                   icon: _fetchingRate
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(Icons.cloud_download),
                   label: const Text('Traer Binance'),
                 ),
@@ -641,7 +690,9 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
 
             TextField(
               controller: _usdRateManual,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Tasa USD→Bs (manual)',
                 hintText: 'Ej: 9.21',
@@ -667,14 +718,19 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             Row(
               children: [
                 const Expanded(
-                  child: Text('Mantener margen si cambia el dólar', style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'Mantener margen si cambia el dólar',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
                 Switch(
                   value: _protectMargin,
                   onChanged: (v) {
                     setState(() {
                       _protectMargin = v;
-                      if (v && _usdRate != null) _protectedUsdRateAtSave ??= _usdRate;
+                      if (v && _usdRate != null) {
+                        _protectedUsdRateAtSave ??= _usdRate;
+                      }
                       if (!v) _protectedUsdRateAtSave = null;
                     });
                   },
@@ -696,10 +752,14 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
-                child: Text('Costo convertido (Bs): ${_fmtMoney(convertedBob)}',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                child: Text(
+                  'Costo convertido (Bs): ${_fmtMoney(convertedBob)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
               const SizedBox(height: 12),
             ],
@@ -708,10 +768,19 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_supportsMargin) ...[
             Row(
               children: [
-                const Expanded(child: Text('Margen', style: TextStyle(fontWeight: FontWeight.w700))),
+                const Expanded(
+                  child: Text(
+                    'Margen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
                 Row(
                   children: [
-                    Text(_effectivePro ? 'Calcular margen' : 'Calcular margen (PRO)'),
+                    Text(
+                      _effectivePro
+                          ? 'Calcular margen'
+                          : 'Calcular margen (PRO)',
+                    ),
                     const SizedBox(width: 8),
                     Switch(
                       value: _calcMargin,
@@ -731,8 +800,13 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
               const SizedBox(height: 8),
               TextField(
                 controller: _markup,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: '% margen', suffixText: '%'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: '% margen',
+                  suffixText: '%',
+                ),
               ),
               const SizedBox(height: 12),
             ] else ...[
@@ -743,8 +817,12 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           if (_supportsStock) ...[
             TextField(
               controller: _min,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Stock mínimo (alerta)'),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Stock mínimo (alerta)',
+              ),
             ),
           ],
         ],

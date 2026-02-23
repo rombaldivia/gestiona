@@ -9,6 +9,6 @@ final dollarRepositoryProvider = Provider<DollarRepository>((ref) {
 /// Estado de protección dólar por UID (vive en users/{uid}.dollarProtection)
 final dollarProtectionProvider =
     StreamProvider.family<DollarProtectionState, String>((ref, uid) {
-  final repo = ref.watch(dollarRepositoryProvider);
-  return repo.watchState(uid);
-});
+      final repo = ref.watch(dollarRepositoryProvider);
+      return repo.watchState(uid);
+    });

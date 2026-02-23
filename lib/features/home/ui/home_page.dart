@@ -5,6 +5,7 @@ import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 import '../../inventory/ui/inventory_page.dart';
+import '../../quotes/ui/quotes_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -96,7 +97,6 @@ class HomePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Header suave (subtítulo pequeño)
           Row(
             children: [
               Expanded(
@@ -110,22 +110,26 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Grid 2x2 premium moderno
+          // Grid 2x2
           Row(
             children: [
               Expanded(
                 child: _PremiumCard(
-                  variant: _CardVariant.primary,
+                  variant: _CardVariant.quotesBlue,
                   title: 'Cotizaciones',
                   subtitle: 'Hoy: 2 pendientes',
                   buttonText: 'Crear cotización',
-                  onPressed: () => _todo(context, 'Cotizaciones'),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const QuotesPage()),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _PremiumCard(
-                  variant: _CardVariant.accent,
+                  variant: _CardVariant.workPurple,
                   title: 'Órdenes\nde trabajo',
                   subtitle: 'En proceso: 5',
                   buttonText: 'Ver órdenes',
@@ -139,7 +143,7 @@ class HomePage extends StatelessWidget {
             children: [
               Expanded(
                 child: _PremiumCard(
-                  variant: _CardVariant.neutral,
+                  variant: _CardVariant.inventoryGreen,
                   title: 'Inventario',
                   subtitle: 'Stock y movimientos',
                   buttonText: 'Ver stock',
@@ -153,7 +157,7 @@ class HomePage extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _PremiumCard(
-                  variant: _CardVariant.neutral,
+                  variant: _CardVariant.billingOrange,
                   title: 'Facturación',
                   subtitle: 'Por cobrar hoy: 2',
                   buttonText: 'Impuestos',
@@ -165,18 +169,18 @@ class HomePage extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Flujo de trabajo (simple, premium)
+          // Flujo de trabajo
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
               side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Flujo de trabajo',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
@@ -195,7 +199,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-enum _CardVariant { primary, accent, neutral }
+enum _CardVariant { quotesBlue, workPurple, inventoryGreen, billingOrange }
 
 class _PremiumCard extends StatelessWidget {
   const _PremiumCard({
@@ -214,8 +218,6 @@ class _PremiumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     Color bg;
     Color border;
     Color titleColor;
@@ -223,30 +225,42 @@ class _PremiumCard extends StatelessWidget {
     Color buttonBg;
     Color buttonFg;
 
+    // Colores “por módulo” (como antes)
     switch (variant) {
-      case _CardVariant.primary:
-        bg = scheme.primaryContainer.withValues(alpha: 0.85);
-        border = scheme.primary.withValues(alpha: 0.18);
-        titleColor = scheme.onPrimaryContainer;
-        subColor = scheme.onPrimaryContainer.withValues(alpha: 0.85);
-        buttonBg = scheme.primary;
-        buttonFg = scheme.onPrimary;
+      case _CardVariant.quotesBlue:
+        bg = const Color(0xFF2F6DAE).withValues(alpha: 0.10);
+        border = const Color(0xFF2F6DAE).withValues(alpha: 0.25);
+        titleColor = const Color(0xFF2F6DAE);
+        subColor = const Color(0xFF2F6DAE).withValues(alpha: 0.75);
+        buttonBg = const Color(0xFF2F6DAE);
+        buttonFg = Colors.white;
         break;
-      case _CardVariant.accent:
-        bg = scheme.tertiaryContainer.withValues(alpha: 0.85);
-        border = scheme.tertiary.withValues(alpha: 0.18);
-        titleColor = scheme.onTertiaryContainer;
-        subColor = scheme.onTertiaryContainer.withValues(alpha: 0.85);
-        buttonBg = scheme.tertiary;
-        buttonFg = scheme.onTertiary;
+
+      case _CardVariant.workPurple:
+        bg = const Color(0xFF3E5C76).withValues(alpha: 0.10);
+        border = const Color(0xFF3E5C76).withValues(alpha: 0.25);
+        titleColor = const Color(0xFF3E5C76);
+        subColor = const Color(0xFF3E5C76).withValues(alpha: 0.75);
+        buttonBg = const Color(0xFF3E5C76);
+        buttonFg = Colors.white;
         break;
-      case _CardVariant.neutral:
-        bg = scheme.surfaceContainerHighest.withValues(alpha: 0.55);
-        border = Colors.black.withValues(alpha: 0.08);
-        titleColor = scheme.onSurface;
-        subColor = scheme.onSurfaceVariant;
-        buttonBg = scheme.primary;
-        buttonFg = scheme.onPrimary;
+
+      case _CardVariant.inventoryGreen:
+        bg = const Color(0xFF2A6F6B).withValues(alpha: 0.10);
+        border = const Color(0xFF2A6F6B).withValues(alpha: 0.25);
+        titleColor = const Color(0xFF2A6F6B);
+        subColor = const Color(0xFF2A6F6B).withValues(alpha: 0.75);
+        buttonBg = const Color(0xFF2A6F6B);
+        buttonFg = Colors.white;
+        break;
+
+      case _CardVariant.billingOrange:
+        bg = const Color(0xFF495867).withValues(alpha: 0.10);
+        border = const Color(0xFF495867).withValues(alpha: 0.25);
+        titleColor = const Color(0xFF495867);
+        subColor = const Color(0xFF495867).withValues(alpha: 0.75);
+        buttonBg = const Color(0xFF495867);
+        buttonFg = Colors.white;
         break;
     }
 
@@ -267,32 +281,26 @@ class _PremiumCard extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 15,
-                  height: 1.05,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
                   color: titleColor,
                 ),
               ),
               const SizedBox(height: 6),
-              Text(subtitle, style: TextStyle(fontSize: 12.5, color: subColor)),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: subColor)),
               const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 38,
-                child: ElevatedButton(
-                  onPressed: onPressed,
-                  style: ElevatedButton.styleFrom(
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
                     backgroundColor: buttonBg,
                     foregroundColor: buttonFg,
-                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: Text(
-                    buttonText,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  onPressed: onPressed,
+                  child: Text(buttonText),
                 ),
               ),
             ],
@@ -310,31 +318,13 @@ class _FlowItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
-      ),
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          SizedBox(
-            width: 56,
-            child: Text(
-              time,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
+          SizedBox(width: 56, child: Text(time, style: t.bodySmall)),
+          Expanded(child: Text(text, style: t.bodyMedium)),
         ],
       ),
     );

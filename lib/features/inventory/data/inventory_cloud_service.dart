@@ -12,7 +12,10 @@ class InventoryCloudService {
   CollectionReference<Map<String, dynamic>> _itemsCol({
     required String companyId,
   }) {
-    return _db.collection('companies').doc(companyId).collection('inventory_items');
+    return _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('inventory_items');
   }
 
   CollectionReference<Map<String, dynamic>> _movCol({

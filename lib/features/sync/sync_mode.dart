@@ -1,4 +1,0 @@
-enum SyncMode {
-  local,
-  cloud,
-}
