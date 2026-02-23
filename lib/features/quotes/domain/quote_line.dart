@@ -61,7 +61,8 @@ class QuoteLine {
       unitPriceBobSnapshot: unitPriceBobSnapshot ?? this.unitPriceBobSnapshot,
       costBobSnapshot: costBobSnapshot ?? this.costBobSnapshot,
       usdRateSnapshot: usdRateSnapshot ?? this.usdRateSnapshot,
-      usdRateSourceSnapshot: usdRateSourceSnapshot ?? this.usdRateSourceSnapshot,
+      usdRateSourceSnapshot:
+          usdRateSourceSnapshot ?? this.usdRateSourceSnapshot,
       usdRateUpdatedAtMsSnapshot:
           usdRateUpdatedAtMsSnapshot ?? this.usdRateUpdatedAtMsSnapshot,
       note: note ?? this.note,
@@ -69,20 +70,20 @@ class QuoteLine {
   }
 
   Map<String, dynamic> toJson() => {
-        'lineId': lineId,
-        'kind': kind,
-        'inventoryItemId': inventoryItemId,
-        'nameSnapshot': nameSnapshot,
-        'skuSnapshot': skuSnapshot,
-        'unitSnapshot': unitSnapshot,
-        'qty': qty,
-        'unitPriceBobSnapshot': unitPriceBobSnapshot,
-        'costBobSnapshot': costBobSnapshot,
-        'usdRateSnapshot': usdRateSnapshot,
-        'usdRateSourceSnapshot': usdRateSourceSnapshot,
-        'usdRateUpdatedAtMsSnapshot': usdRateUpdatedAtMsSnapshot,
-        'note': note,
-      };
+    'lineId': lineId,
+    'kind': kind,
+    'inventoryItemId': inventoryItemId,
+    'nameSnapshot': nameSnapshot,
+    'skuSnapshot': skuSnapshot,
+    'unitSnapshot': unitSnapshot,
+    'qty': qty,
+    'unitPriceBobSnapshot': unitPriceBobSnapshot,
+    'costBobSnapshot': costBobSnapshot,
+    'usdRateSnapshot': usdRateSnapshot,
+    'usdRateSourceSnapshot': usdRateSourceSnapshot,
+    'usdRateUpdatedAtMsSnapshot': usdRateUpdatedAtMsSnapshot,
+    'note': note,
+  };
 
   factory QuoteLine.fromJson(Map<String, dynamic> m) {
     double? d(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v');

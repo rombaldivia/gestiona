@@ -2,11 +2,7 @@ import '../domain/quote.dart';
 import '../domain/quote_status.dart';
 
 class QuotesState {
-  const QuotesState({
-    required this.quotes,
-    this.query = '',
-    this.filterStatus,
-  });
+  const QuotesState({required this.quotes, this.query = '', this.filterStatus});
 
   final List<Quote> quotes;
 

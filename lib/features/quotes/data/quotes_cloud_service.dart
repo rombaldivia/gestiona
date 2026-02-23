@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../domain/quote.dart';
 
 class QuotesCloudService {
-  QuotesCloudService({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
+  QuotesCloudService({FirebaseFirestore? db})
+    : _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 

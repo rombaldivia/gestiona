@@ -52,7 +52,9 @@ class QuotesController extends AsyncNotifier<QuotesState> {
       await _ensureCompanyDocIfNeeded(ent);
 
       _cloudSub?.cancel();
-      _cloudSub = _service.watchCloudQuotes(companyId: cid).listen((cloudQuotes) async {
+      _cloudSub = _service.watchCloudQuotes(companyId: cid).listen((
+        cloudQuotes,
+      ) async {
         await _service.applyCloudToLocal(cloudQuotes: cloudQuotes);
 
         final local = await _service.listQuotes();
@@ -166,7 +168,11 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
 
-    await _service.upsertOfflineFirst(companyId: _companyId!, quote: q, ent: ent);
+    await _service.upsertOfflineFirst(
+      companyId: _companyId!,
+      quote: q,
+      ent: ent,
+    );
     await reload();
   }
 
@@ -175,7 +181,11 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
 
-    await _service.deleteOfflineFirst(companyId: _companyId!, quoteId: id, ent: ent);
+    await _service.deleteOfflineFirst(
+      companyId: _companyId!,
+      quoteId: id,
+      ent: ent,
+    );
     await reload();
   }
 }
