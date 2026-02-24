@@ -35,6 +35,45 @@ class QuoteLine {
 
   double get lineTotalBob => qty * unitPriceBobSnapshot;
 
+  // FIX: Sin == y hashCode, copyWith siempre produce un objeto "distinto",
+  // lo que hacía que refreshDraftQuotesFromInventory marcara dirty=true
+  // en TODAS las líneas aunque no hubiera cambiado nada.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! QuoteLine) return false;
+    return lineId == other.lineId &&
+        kind == other.kind &&
+        inventoryItemId == other.inventoryItemId &&
+        nameSnapshot == other.nameSnapshot &&
+        skuSnapshot == other.skuSnapshot &&
+        unitSnapshot == other.unitSnapshot &&
+        qty == other.qty &&
+        unitPriceBobSnapshot == other.unitPriceBobSnapshot &&
+        costBobSnapshot == other.costBobSnapshot &&
+        usdRateSnapshot == other.usdRateSnapshot &&
+        usdRateSourceSnapshot == other.usdRateSourceSnapshot &&
+        usdRateUpdatedAtMsSnapshot == other.usdRateUpdatedAtMsSnapshot &&
+        note == other.note;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        lineId,
+        kind,
+        inventoryItemId,
+        nameSnapshot,
+        skuSnapshot,
+        unitSnapshot,
+        qty,
+        unitPriceBobSnapshot,
+        costBobSnapshot,
+        usdRateSnapshot,
+        usdRateSourceSnapshot,
+        usdRateUpdatedAtMsSnapshot,
+        note,
+      );
+
   QuoteLine copyWith({
     String? lineId,
     String? kind,
@@ -70,20 +109,20 @@ class QuoteLine {
   }
 
   Map<String, dynamic> toJson() => {
-    'lineId': lineId,
-    'kind': kind,
-    'inventoryItemId': inventoryItemId,
-    'nameSnapshot': nameSnapshot,
-    'skuSnapshot': skuSnapshot,
-    'unitSnapshot': unitSnapshot,
-    'qty': qty,
-    'unitPriceBobSnapshot': unitPriceBobSnapshot,
-    'costBobSnapshot': costBobSnapshot,
-    'usdRateSnapshot': usdRateSnapshot,
-    'usdRateSourceSnapshot': usdRateSourceSnapshot,
-    'usdRateUpdatedAtMsSnapshot': usdRateUpdatedAtMsSnapshot,
-    'note': note,
-  };
+        'lineId': lineId,
+        'kind': kind,
+        'inventoryItemId': inventoryItemId,
+        'nameSnapshot': nameSnapshot,
+        'skuSnapshot': skuSnapshot,
+        'unitSnapshot': unitSnapshot,
+        'qty': qty,
+        'unitPriceBobSnapshot': unitPriceBobSnapshot,
+        'costBobSnapshot': costBobSnapshot,
+        'usdRateSnapshot': usdRateSnapshot,
+        'usdRateSourceSnapshot': usdRateSourceSnapshot,
+        'usdRateUpdatedAtMsSnapshot': usdRateUpdatedAtMsSnapshot,
+        'note': note,
+      };
 
   factory QuoteLine.fromJson(Map<String, dynamic> m) {
     double? d(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v');

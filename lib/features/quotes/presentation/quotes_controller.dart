@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
+import '../../company/data/company_cloud_service.dart';
 import '../../company/presentation/company_providers.dart';
 import '../../subscription/domain/entitlements.dart';
 import '../../subscription/presentation/entitlements_providers.dart';
-import '../../company/data/company_cloud_service.dart';
 import '../data/quotes_offline_first_service.dart';
 import '../domain/quote.dart';
 import '../domain/quote_status.dart';
@@ -55,9 +55,11 @@ class QuotesController extends AsyncNotifier<QuotesState> {
       _cloudSub = _service.watchCloudQuotes(companyId: cid).listen((
         cloudQuotes,
       ) async {
-        await _service.applyCloudToLocal(cloudQuotes: cloudQuotes);
-
-        final local = await _service.listQuotes();
+        await _service.applyCloudToLocal(
+          companyId: cid,
+          cloudQuotes: cloudQuotes,
+        );
+        final local = await _service.listQuotes(companyId: cid);
         final cur = state.asData?.value ?? _empty;
         state = AsyncData(cur.copyWith(quotes: local));
       });
@@ -67,7 +69,7 @@ class QuotesController extends AsyncNotifier<QuotesState> {
       _cloudSub?.cancel();
     }
 
-    final quotes = await _service.listQuotes();
+    final quotes = await _service.listQuotes(companyId: cid);
     return QuotesState(quotes: quotes);
   }
 
@@ -86,9 +88,7 @@ class QuotesController extends AsyncNotifier<QuotesState> {
   Future<void> _ensureCompanyDocIfNeeded(Entitlements ent) async {
     if (!ent.cloudSync) return;
     _ensureCompany();
-
     if (_ensuredCompanyOnCloud) return;
-
     try {
       final company = await ref.read(companyControllerProvider.future);
       await _companyCloud.ensureCompanyDocExists(
@@ -96,9 +96,7 @@ class QuotesController extends AsyncNotifier<QuotesState> {
         companyName: company.companyName,
       );
       _ensuredCompanyOnCloud = true;
-    } catch (_) {
-      // no revientes si offline
-    }
+    } catch (_) {}
   }
 
   void setQuery(String q) {
@@ -111,9 +109,13 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     state = AsyncData(cur.copyWith(filterStatus: f, clearFilter: f == null));
   }
 
+  // FIX: microsecondsSinceEpoch para evitar colisiones de ID
+  // cuando se crean dos cotizaciones en el mismo milisegundo.
   Quote newDraft() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final y = DateTime.now().year;
+    final now = DateTime.now();
+    final ms = now.millisecondsSinceEpoch;
+    final us = now.microsecondsSinceEpoch;
+    final y = now.year;
 
     final quotes = state.value?.quotes ?? const <Quote>[];
     final maxSeq = quotes
@@ -121,11 +123,11 @@ class QuotesController extends AsyncNotifier<QuotesState> {
         .fold<int>(0, (m, q) => q.sequence > m ? q.sequence : m);
 
     return Quote(
-      id: 'COT-$now',
+      id: 'COT-$us',
       sequence: maxSeq + 1,
       year: y,
-      createdAtMs: now,
-      updatedAtMs: now,
+      createdAtMs: ms,
+      updatedAtMs: ms,
       status: QuoteStatus.draft,
       currency: 'BOB',
       lines: const [],
@@ -133,8 +135,10 @@ class QuotesController extends AsyncNotifier<QuotesState> {
   }
 
   Quote duplicate(Quote src, {required String mode}) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final y = DateTime.now().year;
+    final now = DateTime.now();
+    final ms = now.millisecondsSinceEpoch;
+    final us = now.microsecondsSinceEpoch;
+    final y = now.year;
 
     final quotes = state.value?.quotes ?? const <Quote>[];
     final maxSeq = quotes
@@ -142,11 +146,11 @@ class QuotesController extends AsyncNotifier<QuotesState> {
         .fold<int>(0, (m, q) => q.sequence > m ? q.sequence : m);
 
     return Quote(
-      id: 'COT-$now',
+      id: 'COT-$us',
       sequence: maxSeq + 1,
       year: y,
-      createdAtMs: now,
-      updatedAtMs: now,
+      createdAtMs: ms,
+      updatedAtMs: ms,
       status: QuoteStatus.draft,
       customerName: src.customerName,
       customerPhone: src.customerPhone,
@@ -167,7 +171,6 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     _ensureCompany();
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
-
     await _service.upsertOfflineFirst(
       companyId: _companyId!,
       quote: q,
@@ -180,12 +183,20 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     _ensureCompany();
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
-
     await _service.deleteOfflineFirst(
       companyId: _companyId!,
       quoteId: id,
       ent: ent,
     );
     await reload();
+  }
+
+  Future<int> syncPending() async {
+    _ensureCompany();
+    final ent = await _getFreshEntitlements();
+    await _ensureCompanyDocIfNeeded(ent);
+    final n = await _service.syncPending(companyId: _companyId!, ent: ent);
+    await reload();
+    return n;
   }
 }
