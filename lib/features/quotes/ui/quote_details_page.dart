@@ -37,21 +37,26 @@ class QuoteDetailsPage extends ConsumerWidget {
 
       if (requote) {
         if (!isPro) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Re-cotizar es PRO.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Re-cotizar es una función PRO.')),
+          );
           return;
         }
         out = _requoteFromInventory(duplicated, invById);
       }
 
       final nav = Navigator.of(context);
-      final saved = await nav.push<Quote>(
-        MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: out)),
+
+      // FIX: ahora QuoteEditorPage hace pop(updated) al guardar, así que
+      // al regresar ya está guardado y simplemente cerramos el detalle.
+      // Antes: pop() sin valor → saved == null → nav.pop nunca corría
+      // → el usuario quedaba atascado en la pantalla de detalles.
+      await nav.push<Quote>(
+        MaterialPageRoute(
+          builder: (_) => QuoteEditorPage(quote: out),
+        ),
       );
-      if (saved != null) {
-        nav.pop(saved);
-      }
+      if (nav.canPop()) nav.pop();
     }
 
     return Scaffold(
@@ -68,7 +73,9 @@ class QuoteDetailsPage extends ConsumerWidget {
               PopupMenuItem(
                 value: 'requote',
                 enabled: isPro,
-                child: Text(isPro ? 'Re-cotizar (PRO)' : 'Re-cotizar (PRO)'),
+                // FIX: antes ambas ramas del ternario eran idénticas
+                // y un usuario PRO veía "Re-cotizar (PRO)" aunque ya fuera PRO.
+                child: Text(isPro ? 'Re-cotizar' : 'Re-cotizar (PRO) 🔒'),
               ),
             ],
           ),
@@ -142,10 +149,12 @@ class QuoteDetailsPage extends ConsumerWidget {
                   onPressed: isPro
                       ? () => doDuplicate(requote: true)
                       : () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Re-cotizar es PRO.')),
-                        ),
+                            const SnackBar(
+                              content: Text('Re-cotizar es una función PRO.'),
+                            ),
+                          ),
                   icon: const Icon(Icons.refresh),
-                  label: Text(isPro ? 'Re-cotizar' : 'Re-cotizar (PRO)'),
+                  label: Text(isPro ? 'Re-cotizar' : 'Re-cotizar (PRO) 🔒'),
                 ),
               ),
             ],
@@ -177,7 +186,7 @@ _QuoteDiff _diffQuote(Quote q, Map<String, InventoryItem> invById) {
     }
 
     final currentPrice = (it.salePrice ?? 0.0);
-    final currentRate = it.usdRate; // si tu InventoryItem lo tiene
+    final currentRate = it.usdRate;
 
     final priceDiff = (currentPrice - l.unitPriceBobSnapshot).abs() > 0.009;
     final rateDiff =
