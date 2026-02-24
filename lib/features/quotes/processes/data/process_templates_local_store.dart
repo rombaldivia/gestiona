@@ -1,15 +1,30 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/process_template.dart';
 
 class ProcessTemplatesLocalStore {
-  static const _kKey = 'quotes.process_templates.v1';
+  static const _kBase = 'quotes.process_templates.v1';
 
-  Future<List<ProcessTemplate>> loadAll() async {
+  // FIX: La clave ahora incluye uid y companyId para que los templates
+  // de proceso no sean compartidos entre distintos usuarios o empresas.
+  // Antes era una clave global 'quotes.process_templates.v1'.
+  String _key(String uid, String companyId) => '$_kBase::$uid::$companyId';
+
+  String _resolveKey({String? uid, String? companyId}) {
+    final u = uid ?? FirebaseAuth.instance.currentUser?.uid ?? 'anon';
+    final c = companyId ?? 'default';
+    return _key(u, c);
+  }
+
+  Future<List<ProcessTemplate>> loadAll({
+    String? uid,
+    String? companyId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kKey);
+    final raw = prefs.getString(_resolveKey(uid: uid, companyId: companyId));
     if (raw == null || raw.trim().isEmpty) return const <ProcessTemplate>[];
 
     try {
@@ -20,26 +35,37 @@ class ProcessTemplatesLocalStore {
           )
           .toList();
     } catch (_) {
-      // si está corrupto, no crashear
       return const <ProcessTemplate>[];
     }
   }
 
-  Future<void> upsert(ProcessTemplate t) async {
-    final items = await loadAll();
+  Future<void> upsert(
+    ProcessTemplate t, {
+    String? uid,
+    String? companyId,
+  }) async {
+    final items = await loadAll(uid: uid, companyId: companyId);
     final next = [t, ...items.where((x) => x.id != t.id)];
-    await _saveAll(next);
+    await _saveAll(next, uid: uid, companyId: companyId);
   }
 
-  Future<void> deleteById(String id) async {
-    final items = await loadAll();
+  Future<void> deleteById(
+    String id, {
+    String? uid,
+    String? companyId,
+  }) async {
+    final items = await loadAll(uid: uid, companyId: companyId);
     final next = items.where((x) => x.id != id).toList();
-    await _saveAll(next);
+    await _saveAll(next, uid: uid, companyId: companyId);
   }
 
-  Future<void> _saveAll(List<ProcessTemplate> items) async {
+  Future<void> _saveAll(
+    List<ProcessTemplate> items, {
+    String? uid,
+    String? companyId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode(items.map((e) => e.toJson()).toList());
-    await prefs.setString(_kKey, raw);
+    await prefs.setString(_resolveKey(uid: uid, companyId: companyId), raw);
   }
 }
