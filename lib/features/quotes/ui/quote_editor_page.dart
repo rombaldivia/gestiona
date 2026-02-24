@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'helpers/quote_recotize_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:printing/printing.dart';
@@ -196,6 +197,23 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
       appBar: AppBar(
         title: Text('COT #${widget.quote.sequence}-${widget.quote.year}'),
         actions: [
+          IconButton(
+            tooltip: 'Recotizar',
+            icon: const Icon(Icons.currency_exchange),
+            onPressed: () {
+              QuoteRecotizeSheet.open(
+                context: context,
+                isPro: () => true,
+                getLines: () => List.of(_lines),
+                setLines: (next) => setState(() {
+                  _lines
+                    ..clear()
+                    ..addAll(next);
+                }),
+              );
+            },
+          ),
+          
           // Estado
           Padding(
             padding: const EdgeInsets.only(right: 8),
