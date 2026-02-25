@@ -15,8 +15,8 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
-          channel: 'stable'
+          flutter-version: '3.42.0-0.0.pre'
+          channel: 'beta'
 
       - name: Instalar dependencias
         run: flutter pub get
