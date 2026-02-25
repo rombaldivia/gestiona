@@ -72,7 +72,9 @@ class _QuoteAddItemSheetState extends State<QuoteAddItemSheet> {
                             final qty = await _askQty(context);
                             if (qty == null) return;
 
-                            final now = DateTime.now().millisecondsSinceEpoch;
+                            // FIX: microsecondsSinceEpoch para evitar colisión
+                            // de lineId cuando se agregan ítems muy rápido.
+                            final now = DateTime.now().microsecondsSinceEpoch;
 
                             final line = QuoteLine(
                               lineId: 'L-$now',
@@ -108,28 +110,47 @@ class _QuoteAddItemSheetState extends State<QuoteAddItemSheet> {
 
 Future<double?> _askQty(BuildContext context) async {
   final c = TextEditingController(text: '1');
+  String? errorText;
+
   final out = await showDialog<double?>(
     context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('Cantidad'),
-      content: TextField(
-        controller: c,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: const InputDecoration(hintText: 'Ej: 2'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, null),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final v = double.tryParse(c.text.trim().replaceAll(',', '.'));
-            Navigator.pop(context, v);
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: const Text('Cantidad'),
+        content: TextField(
+          controller: c,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            hintText: 'Ej: 2',
+            // FIX: mostramos error en el campo si el valor no es válido
+            errorText: errorText,
+          ),
+          onChanged: (_) {
+            if (errorText != null) setState(() => errorText = null);
           },
-          child: const Text('Agregar'),
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final raw = c.text.trim().replaceAll(',', '.');
+              final v = double.tryParse(raw);
+
+              // FIX: validamos que sea un número positivo mayor a 0
+              if (v == null || v <= 0) {
+                setState(() => errorText = 'Ingresa un número mayor a 0');
+                return; // no cerrar el diálogo, mostrar el error
+              }
+
+              Navigator.pop(ctx, v);
+            },
+            child: const Text('Agregar'),
+          ),
+        ],
+      ),
     ),
   );
   return out;

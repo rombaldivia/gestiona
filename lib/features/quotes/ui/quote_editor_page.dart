@@ -1,22 +1,33 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../inventory/presentation/inventory_providers.dart';
+import '../../inventory/presentation/inventory_by_id_provider.dart';
+
+import '../../subscription/domain/entitlements.dart';
+import '../../subscription/domain/plan_tier.dart';
+import '../../subscription/presentation/entitlements_scope.dart';
+
 import '../domain/quote.dart';
 import '../domain/quote_line.dart';
 import '../domain/quote_status.dart';
+import '../pdf/quote_pdf.dart';
 import '../presentation/quotes_controller.dart';
+
+import 'helpers/quote_recotize_sheet.dart';
 import 'widgets/quote_add_item_sheet.dart';
 import 'widgets/quote_line_tile.dart';
 
-// ✅ NUEVO: picker + helper
-import '../processes/ui/widgets/pick_process_template_dialog.dart';
 import '../processes/ui/helpers/process_to_quote_lines.dart';
-import '../processes/domain/process_template.dart';
+import '../processes/ui/widgets/pick_process_template_dialog.dart';
 
 class QuoteEditorPage extends ConsumerStatefulWidget {
   const QuoteEditorPage({super.key, required this.quote});
-
   final Quote quote;
 
   @override
@@ -31,16 +42,17 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   late final TextEditingController _notesCtrl;
 
   QuoteStatus _status = QuoteStatus.draft;
-  String _phoneE164 = '';
-
   final List<QuoteLine> _lines = [];
+
+  // ✅ Snapshot para revertir recotización (hasta que guardes)
+  List<QuoteLine>? _undoLinesSnapshot;
+
+  String _phoneE164 = '';
 
   @override
   void initState() {
     super.initState();
-    _customerCtrl = TextEditingController(
-      text: widget.quote.customerName ?? '',
-    );
+    _customerCtrl = TextEditingController(text: widget.quote.customerName ?? '');
     _notesCtrl = TextEditingController(text: widget.quote.notes ?? '');
     _status = widget.quote.status;
     _lines.addAll(widget.quote.lines);
@@ -54,145 +66,206 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     super.dispose();
   }
 
-  Future<double?> _askQty(double initial) async {
-    final ctrl = TextEditingController(text: initial.toString());
-    double? out;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cantidad'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Ej: 2'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = ctrl.text.replaceAll(',', '.').trim();
-              out = double.tryParse(v);
-              Navigator.pop(ctx);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-
-    return out;
+  void _stashUndoSnapshot() {
+    _undoLinesSnapshot ??= List<QuoteLine>.from(_lines);
   }
 
-  Future<void> _addLine() async {
-    final items = ref.read(inventoryItemsProvider);
+  void _undoRecotize() {
+    final snap = _undoLinesSnapshot;
+    if (snap == null) return;
+
+    setState(() {
+      _lines
+        ..clear()
+        ..addAll(snap);
+      _undoLinesSnapshot = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Recotización revertida')),
+    );
+  }
+
+  String _fmt(double v) => v.toStringAsFixed(2);
+
+  String _buildWhatsappText(double totalBob) {
+    final b = StringBuffer();
+    b.writeln('COT #${widget.quote.sequence}-${widget.quote.year}');
+    b.writeln('Cliente: ${_customerCtrl.text.trim()}');
+    b.writeln();
+    for (final l in _lines) {
+      b.writeln(
+        '• ${l.nameSnapshot}  x${l.qty.toStringAsFixed(0)}  = Bs ${l.lineTotalBob.toStringAsFixed(2)}',
+      );
+    }
+    b.writeln();
+    b.writeln('Total: Bs ${totalBob.toStringAsFixed(2)}');
+
+    final notes = _notesCtrl.text.trim();
+    if (notes.isNotEmpty) {
+      b.writeln();
+      b.writeln('Notas: $notes');
+    }
+    return b.toString();
+  }
+
+  Future<void> _sendWhatsapp(double total) async {
+    final phone = _phoneE164.trim();
+    if (phone.isEmpty || _lines.isEmpty) return;
+
+    final digits = phone.replaceAll('+', '');
+    final text = _buildWhatsappText(total);
+    final uri =
+        Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(text)}');
+
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _sharePdf() async {
+    if (_lines.isEmpty) return;
+    final q = widget.quote.copyWith(lines: _lines);
+
+    // ✅ tu QuotePdf en este repo usa build()
+    final Uint8List bytes = await QuotePdf.build(
+      quote: q,
+      lines: q.lines,
+      totalBob: q.totalBob,
+    );
+
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'COT_${widget.quote.sequence}-${widget.quote.year}.pdf',
+    );
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _saving = true);
+    try {
+      final q = widget.quote.copyWith(
+        customerName: _customerCtrl.text.trim(),
+        customerPhone: _phoneE164.trim(),
+        notes: _notesCtrl.text.trim(),
+        status: _status,
+        lines: _lines,
+      );
+      await ref.read(quotesControllerProvider.notifier).upsert(q);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cotización guardada')),
+      );
+
+      // ✅ después de guardar, ya no tiene sentido undo
+      _undoLinesSnapshot = null;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _addItem() async {
+    final invItems = ref.read(inventoryItemsProvider);
 
     final line = await showModalBottomSheet<QuoteLine?>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => QuoteAddItemSheet(inventoryItems: items),
+      showDragHandle: true,
+      builder: (_) => QuoteAddItemSheet(inventoryItems: invItems),
     );
 
-    if (line != null) setState(() => _lines.add(line));
+    if (line != null) {
+      setState(() => _lines.add(line));
+    }
   }
 
-  // ✅ NUEVO: Traer proceso y convertirlo a items
-  Future<void> _addFromProcessTemplate() async {
-    final template = await showDialog<ProcessTemplate?>(
+  Future<void> _addProcess() async {
+    final template = await showDialog(
       context: context,
       builder: (_) => const PickProcessTemplateDialog(),
     );
-
     if (template == null) return;
 
-    final inv = ref.read(inventoryItemsProvider);
-    final invById = {for (final x in inv) x.id: x};
-
+    final invById = ref.read(inventoryByIdProvider);
     final newLines = processTemplateToQuoteLines(
       template: template,
       inventoryById: invById,
     );
 
-    if (newLines.isEmpty) return;
-
-    setState(() => _lines.addAll(newLines));
-  }
-
-  void _removeLine(String lineId) {
-    setState(() => _lines.removeWhere((l) => l.lineId == lineId));
-  }
-
-  Future<void> _editQty(QuoteLine line) async {
-    final newQty = await _askQty(line.qty);
-    if (newQty == null || newQty <= 0) return;
-    setState(() {
-      final i = _lines.indexWhere((l) => l.lineId == line.lineId);
-      if (i >= 0) _lines[i] = line.copyWith(qty: newQty);
-    });
-  }
-
-  Future<void> _save() async {
-    final ok = _formKey.currentState?.validate() ?? false;
-    if (!ok) return;
-
-    setState(() => _saving = true);
-
-    try {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final updated = widget.quote.copyWith(
-        customerName: _customerCtrl.text.trim(),
-        customerPhone: _phoneE164.trim().isEmpty ? null : _phoneE164.trim(),
-        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        lines: _lines,
-        status: _status,
-        updatedAtMs: now,
-      );
-
-      await ref.read(quotesControllerProvider.notifier).upsert(updated);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-    } finally {
-      if (mounted) setState(() => _saving = false);
+    if (newLines.isNotEmpty) {
+      setState(() => _lines.addAll(newLines));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isNew =
-        widget.quote.lines.isEmpty && widget.quote.customerName == null;
+    final total = widget.quote.copyWith(lines: _lines).totalBob;
+
+    final hasPhone = _phoneE164.trim().isNotEmpty;
+    final hasLines = _lines.isNotEmpty;
+
+    final ent =
+        EntitlementsScope.maybeOf(context) ?? Entitlements.forTier(PlanTier.free);
+    final isPro = ent.tier == PlanTier.pro;
 
     return Scaffold(
       appBar: AppBar(
         title: Text('COT #${widget.quote.sequence}-${widget.quote.year}'),
         actions: [
-          if (!isNew)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: DropdownButton<QuoteStatus>(
-                value: _status,
-                underline: const SizedBox.shrink(),
-                borderRadius: BorderRadius.circular(16),
-                items: QuoteStatus.values
-                    .map(
-                      (s) => DropdownMenuItem(
-                        value: s,
-                        child: Text(
-                          s.label,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (s) {
-                  if (s != null) setState(() => _status = s);
+          IconButton(
+            tooltip: 'Revertir recotización',
+            icon: const Icon(Icons.undo),
+            onPressed: (_undoLinesSnapshot == null) ? null : _undoRecotize,
+          ),
+          IconButton(
+            tooltip: isPro ? 'Recotizar' : 'Recotizar (API solo PRO)',
+            icon: const Icon(Icons.currency_exchange),
+            onPressed: () async {
+              await QuoteRecotizeSheet.open(
+                context: context,
+                lines: _lines,
+                onApply: (newLines) {
+                  _stashUndoSnapshot();
+                  setState(() {
+                    _lines
+                      ..clear()
+                      ..addAll(newLines);
+                  });
                 },
-              ),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'WhatsApp',
+            icon: const Icon(Icons.chat),
+            onPressed: (!hasPhone || !hasLines) ? null : () => _sendWhatsapp(total),
+          ),
+          IconButton(
+            tooltip: 'PDF',
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: !hasLines ? null : _sharePdf,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: DropdownButton<QuoteStatus>(
+              value: _status,
+              underline: const SizedBox.shrink(),
+              borderRadius: BorderRadius.circular(16),
+              items: QuoteStatus.values
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s,
+                      child: Text(s.label, style: const TextStyle(fontSize: 13)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (s) {
+                if (s != null) setState(() => _status = s);
+              },
             ),
+          ),
           TextButton(
             onPressed: _saving ? null : _save,
             child: _saving
@@ -213,82 +286,91 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
           children: [
             TextFormField(
               controller: _customerCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Cliente',
-                hintText: 'Ej: Juan Pérez',
-              ),
+              decoration: const InputDecoration(labelText: 'Cliente'),
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Requerido' : null,
             ),
             const SizedBox(height: 12),
+            IntlPhoneField(
+              initialValue: _phoneE164,
+              decoration: const InputDecoration(labelText: 'Teléfono'),
+              onChanged: (p) => _phoneE164 = p.completeNumber,
+            ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Notas',
-                hintText: 'Detalles…',
-              ),
-              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Notas'),
+              minLines: 2,
+              maxLines: 6,
             ),
             const SizedBox(height: 16),
-
             Row(
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _addLine,
+                    onPressed: _addItem,
                     icon: const Icon(Icons.add),
-                    label: const Text('Añadir ítem'),
+                    label: const Text('Ítem'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _addFromProcessTemplate,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _addProcess,
                     icon: const Icon(Icons.playlist_add),
-                    label: const Text('Traer proceso'),
+                    label: const Text('Proceso'),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 14),
-
+            const SizedBox(height: 12),
+            if (_lines.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text('Aún no hay ítems en la cotización.'),
+              ),
+            for (final l in _lines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: QuoteLineTile(
+                  line: l,
+                  onRemove: () => setState(() => _lines.remove(l)),
+                  onEditQty: (newQty) {
+                    setState(() {
+                      final idx = _lines.indexOf(l);
+                      if (idx >= 0) _lines[idx] = l.copyWith(qty: newQty);
+                    });
+                  },
+                ),
+              ),
+            const SizedBox(height: 10),
             Container(
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: scheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: scheme.outlineVariant),
               ),
-              child: Column(
+              child: Row(
                 children: [
-                  if (_lines.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Aún no hay ítems.',
-                        style: TextStyle(color: scheme.outline),
-                      ),
+                  const Expanded(
+                    child: Text(
+                      'Total',
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
-                  for (final l in _lines)
-                    QuoteLineTile(
-                      line: l,
-                      onRemove: () => _removeLine(l.lineId),
-                      onEditQty: () => _editQty(l),
+                  ),
+                  Text(
+                    'Bs ${_fmt(total)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: scheme.primary,
                     ),
+                  ),
                 ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Total: Bs ${widget.quote.copyWith(lines: _lines).totalBob.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
               ),
             ),
           ],

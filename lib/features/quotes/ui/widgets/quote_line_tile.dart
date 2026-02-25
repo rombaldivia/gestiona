@@ -6,77 +6,87 @@ class QuoteLineTile extends StatelessWidget {
   const QuoteLineTile({
     super.key,
     required this.line,
-    required this.onEditQty,
     required this.onRemove,
+    required this.onEditQty,
   });
 
   final QuoteLine line;
-  final VoidCallback? onEditQty;
   final VoidCallback? onRemove;
+  final ValueChanged<double> onEditQty;
+
+  String _fmt(double v) => v.toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
-    final hasUsd = (line.usdRateSnapshot ?? 0) > 0;
+    final scheme = Theme.of(context).colorScheme;
 
-    return Card(
-      elevation: 0,
-      child: ListTile(
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                line.nameSnapshot,
-                style: const TextStyle(fontWeight: FontWeight.w900),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (hasUsd)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.10),
-                  ),
-                ),
-                child: const Text(
-                  'USD🔒',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
-        subtitle: Text(
-          '${line.qty.toStringAsFixed(2)} x Bs ${line.unitPriceBobSnapshot.toStringAsFixed(2)}'
-          '${line.skuSnapshot == null ? '' : ' • SKU ${line.skuSnapshot}'}',
-        ),
-        trailing: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Bs ${line.lineTotalBob.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (onEditQty != null)
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: onEditQty,
+                Text(
+                  line.nameSnapshot,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'x${line.qty.toStringAsFixed(0)}  •  Bs ${_fmt(line.unitPriceBobSnapshot)} c/u',
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+                if ((line.note ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    line.note!.trim(),
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
-                if (onRemove != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: onRemove,
-                  ),
+                ],
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            children: [
+              Text(
+                'Bs ${_fmt(line.lineTotalBob)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Menos',
+                    onPressed: () => onEditQty((line.qty - 1).clamp(1, 9999)),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  IconButton(
+                    tooltip: 'Más',
+                    onPressed: () => onEditQty((line.qty + 1).clamp(1, 9999)),
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                  IconButton(
+                    tooltip: 'Eliminar',
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
