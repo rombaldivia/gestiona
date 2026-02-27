@@ -24,6 +24,9 @@ import 'widgets/quote_add_item_sheet.dart';
 import 'widgets/quote_line_tile.dart';
 
 import '../processes/ui/helpers/process_to_quote_lines.dart';
+import '../../work_orders/domain/work_order.dart';
+import '../../work_orders/domain/work_order_status.dart';
+import '../../work_orders/ui/work_order_editor_page.dart';
 import '../processes/ui/widgets/pick_process_template_dialog.dart';
 
 class QuoteEditorPage extends ConsumerStatefulWidget {
@@ -38,6 +41,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   final _formKey = GlobalKey<FormState>();
   bool _saving = false;
 
+  late final TextEditingController _titleCtrl;
   late final TextEditingController _customerCtrl;
   late final TextEditingController _notesCtrl;
 
@@ -52,6 +56,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   @override
   void initState() {
     super.initState();
+    _titleCtrl    = TextEditingController(text: widget.quote.title ?? '');
     _customerCtrl = TextEditingController(text: widget.quote.customerName ?? '');
     _notesCtrl = TextEditingController(text: widget.quote.notes ?? '');
     _status = widget.quote.status;
@@ -61,6 +66,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
 
   @override
   void dispose() {
+    _titleCtrl.dispose();
     _customerCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -121,6 +127,51 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  void _createWorkOrder() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final q = widget.quote.copyWith(
+      title:         _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+      customerName:  _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
+      customerPhone: _phoneE164.isEmpty ? null : _phoneE164,
+      lines:         _lines,
+      status:        _status,
+    );
+
+    // Cada línea de la cotización se convierte en una etapa de la OT
+    final steps = _lines.asMap().entries.map((e) {
+      final idx  = e.key;
+      final line = e.value;
+      final qtyStr = line.qty == line.qty.roundToDouble()
+          ? line.qty.toInt().toString()
+          : line.qty.toStringAsFixed(2);
+      return WorkOrderStep(
+        id:    '${now}_$idx',
+        title: line.nameSnapshot,
+        qty:   line.qty,
+        unit:  line.unitSnapshot ?? 'und',
+        notes: 'Cantidad: $qtyStr ${line.unitSnapshot ?? 'und'}',
+      );
+    }).toList();
+
+    final wo = WorkOrder(
+      id:            now.toRadixString(36),
+      sequence:      0,
+      year:          DateTime.now().year,
+      createdAtMs:   now,
+      updatedAtMs:   now,
+      status:        WorkOrderStatus.pending,
+      quoteTitle:    q.title,
+      quoteId:       q.id,
+      quoteSequence: q.sequence,
+      customerName:  q.customerName,
+      customerPhone: q.customerPhone,
+      steps:         steps,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)),
+    );
+  }
+
   Future<void> _sharePdf() async {
     if (_lines.isEmpty) return;
     final q = widget.quote.copyWith(lines: _lines);
@@ -145,6 +196,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     setState(() => _saving = true);
     try {
       final q = widget.quote.copyWith(
+        title:        _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
         customerName: _customerCtrl.text.trim(),
         customerPhone: _phoneE164.trim(),
         notes: _notesCtrl.text.trim(),
@@ -285,6 +337,15 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
           padding: const EdgeInsets.all(16),
           children: [
             TextFormField(
+              controller: _titleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nombre del proyecto',
+                hintText: 'Ej: Impresión catálogo Hermenca',
+                prefixIcon: Icon(Icons.label_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
               controller: _customerCtrl,
               decoration: const InputDecoration(labelText: 'Cliente'),
               validator: (v) =>
@@ -373,6 +434,25 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 ],
               ),
             ),
+
+            // ── Botón Crear OT solo si está Aceptada ──────────────────────
+            if (_status == QuoteStatus.accepted) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF312E81),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: _createWorkOrder,
+                  icon: const Icon(Icons.engineering_outlined),
+                  label: const Text('Crear Orden de Trabajo',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
