@@ -10,6 +10,7 @@ class Quote {
     required this.createdAtMs,
     required this.updatedAtMs,
     required this.status,
+    this.title,
     this.customerName,
     this.customerPhone,
     this.notes,
@@ -32,6 +33,7 @@ class Quote {
   final int updatedAtMs;
   final QuoteStatus status;
 
+  final String? title;       // nombre/descripción de la cotización
   final String? customerName;
   final String? customerPhone;
   final String? notes;
@@ -56,6 +58,7 @@ class Quote {
     int? createdAtMs,
     int? updatedAtMs,
     QuoteStatus? status,
+    String? title,
     String? customerName,
     String? customerPhone,
     String? notes,
@@ -72,6 +75,7 @@ class Quote {
       createdAtMs: createdAtMs ?? this.createdAtMs,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       status: status ?? this.status,
+      title: title ?? this.title,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
       notes: notes ?? this.notes,
@@ -90,6 +94,7 @@ class Quote {
     'createdAtMs': createdAtMs,
     'updatedAtMs': updatedAtMs,
     'status': status.name,
+    'title': title,
     'customerName': customerName,
     'customerPhone': customerPhone,
     'notes': notes,
@@ -121,6 +126,7 @@ class Quote {
       createdAtMs: toIntSafe(m['createdAtMs'], 0),
       updatedAtMs: toIntSafe(m['updatedAtMs'], 0),
       status: QuoteStatus.fromString(m['status']?.toString()),
+      title: m['title']?.toString(),
       customerName: m['customerName']?.toString(),
       customerPhone: m['customerPhone']?.toString(),
       notes: m['notes']?.toString(),

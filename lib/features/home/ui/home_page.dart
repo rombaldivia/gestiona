@@ -7,6 +7,7 @@ import '../../company/presentation/company_scope.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 import '../../inventory/ui/inventory_page.dart';
 import '../../quotes/ui/quotes_tabs_page.dart';
+import '../../work_orders/ui/work_orders_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -152,7 +153,9 @@ class HomePage extends StatelessWidget {
                   title: 'Órdenes de trabajo',
                   subtitle: 'Producción',
                   buttonText: 'Abrir',
-                  onPressed: () => _todo(context, 'Órdenes de trabajo'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const WorkOrdersPage()),
+                  ),
                 ),
               ),
             ],
