@@ -25,8 +25,8 @@ import 'widgets/quote_line_tile.dart';
 
 import '../processes/ui/helpers/process_to_quote_lines.dart';
 import '../../work_orders/domain/work_order.dart';
-import '../../work_orders/domain/work_order_status.dart';
 import '../../work_orders/ui/work_order_editor_page.dart';
+import '../../work_orders/presentation/work_orders_controller.dart';
 import '../processes/ui/widgets/pick_process_template_dialog.dart';
 
 class QuoteEditorPage extends ConsumerStatefulWidget {
@@ -127,7 +127,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  void _createWorkOrder() {
+  Future<void> _createWorkOrder() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final q = widget.quote.copyWith(
       title:         _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
@@ -153,20 +153,21 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
       );
     }).toList();
 
-    final wo = WorkOrder(
-      id:            now.toRadixString(36),
-      sequence:      0,
-      year:          DateTime.now().year,
-      createdAtMs:   now,
-      updatedAtMs:   now,
-      status:        WorkOrderStatus.pending,
-      quoteTitle:    q.title,
+    // Usa el controller para obtener el correlativo correcto
+    final woCtrl = ref.read(workOrdersControllerProvider.notifier);
+    final template = woCtrl.newOrder(
       quoteId:       q.id,
       quoteSequence: q.sequence,
       customerName:  q.customerName,
       customerPhone: q.customerPhone,
-      steps:         steps,
     );
+
+    final wo = template.copyWith(
+      quoteTitle: q.title,
+      steps:      steps,
+    );
+
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)),
     );

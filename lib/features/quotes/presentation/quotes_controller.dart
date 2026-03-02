@@ -69,8 +69,53 @@ class QuotesController extends AsyncNotifier<QuotesState> {
       _cloudSub?.cancel();
     }
 
-    final quotes = await _service.listQuotes(companyId: cid);
+    final raw    = await _service.listQuotes(companyId: cid);
+    final quotes = await _fixBrokenSequences(raw, companyId: cid);
     return QuotesState(quotes: quotes);
+  }
+
+  /// Repara cotizaciones con sequence=0 asignándoles un correlativo
+  /// cronológico. Solo se ejecuta si hay datos rotos — luego no hace nada.
+  Future<List<Quote>> _fixBrokenSequences(
+    List<Quote> quotes, {
+    required String companyId,
+  }) async {
+    if (!quotes.any((q) => q.sequence == 0)) return quotes;
+
+    final uid = _service.currentUid;
+    if (uid == null) return quotes;
+
+    // Ordena por fecha de creación para asignar 1,2,3 en orden cronológico
+    final sorted = [...quotes]
+      ..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
+
+    final Map<int, int> counter = {};
+    final fixed = sorted.map((q) {
+      if (q.sequence != 0) {
+        final cur = counter[q.year] ?? 0;
+        if (q.sequence > cur) counter[q.year] = q.sequence;
+        return q;
+      }
+      final next = (counter[q.year] ?? 0) + 1;
+      counter[q.year] = next;
+      return q.copyWith(sequence: next);
+    }).toList();
+
+    // Persiste localmente
+    await _service.saveAllLocal(
+      companyId: companyId,
+      uid: uid,
+      quotes: fixed,
+    );
+
+    // También sube a Firestore para que no vuelva a pasar
+    await _service.pushSequencesToCloud(
+      companyId: companyId,
+      uid: uid,
+      quotes: fixed,
+    );
+
+    return fixed;
   }
 
   void _ensureCompany() {
@@ -109,56 +154,62 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     state = AsyncData(cur.copyWith(filterStatus: f, clearFilter: f == null));
   }
 
-  // FIX: microsecondsSinceEpoch para evitar colisiones de ID
-  // cuando se crean dos cotizaciones en el mismo milisegundo.
-  Quote newDraft() {
+  // FIX: async — lee del store para evitar sequence=1 cuando el
+  // provider aún está cargando o el estado tiene datos incompletos.
+  Future<Quote> newDraft() async {
     final now = DateTime.now();
-    final ms = now.millisecondsSinceEpoch;
-    final us = now.microsecondsSinceEpoch;
-    final y = now.year;
+    final ms  = now.millisecondsSinceEpoch;
+    final us  = now.microsecondsSinceEpoch;
+    final y   = now.year;
 
-    final quotes = state.value?.quotes ?? const <Quote>[];
-    final maxSeq = quotes
+    final all = _companyId != null
+        ? await _service.listQuotes(companyId: _companyId!)
+        : (state.value?.quotes ?? const <Quote>[]);
+
+    final maxSeq = all
         .where((q) => q.year == y)
         .fold<int>(0, (m, q) => q.sequence > m ? q.sequence : m);
 
     return Quote(
-      id: 'COT-$us',
-      sequence: maxSeq + 1,
-      year: y,
+      id:          'COT-$us',
+      sequence:    maxSeq + 1,
+      year:        y,
       createdAtMs: ms,
       updatedAtMs: ms,
-      status: QuoteStatus.draft,
-      currency: 'BOB',
-      lines: const [],
+      status:      QuoteStatus.draft,
+      currency:    'BOB',
+      lines:       const [],
     );
   }
 
-  Quote duplicate(Quote src, {required String mode}) {
+  Future<Quote> duplicate(Quote src, {required String mode}) async {
     final now = DateTime.now();
-    final ms = now.millisecondsSinceEpoch;
-    final us = now.microsecondsSinceEpoch;
-    final y = now.year;
+    final ms  = now.millisecondsSinceEpoch;
+    final us  = now.microsecondsSinceEpoch;
+    final y   = now.year;
 
-    final quotes = state.value?.quotes ?? const <Quote>[];
-    final maxSeq = quotes
+    final all = _companyId != null
+        ? await _service.listQuotes(companyId: _companyId!)
+        : (state.value?.quotes ?? const <Quote>[]);
+
+    final maxSeq = all
         .where((q) => q.year == y)
         .fold<int>(0, (m, q) => q.sequence > m ? q.sequence : m);
 
     return Quote(
-      id: 'COT-$us',
-      sequence: maxSeq + 1,
-      year: y,
-      createdAtMs: ms,
-      updatedAtMs: ms,
-      status: QuoteStatus.draft,
+      id:           'COT-$us',
+      sequence:     maxSeq + 1,
+      year:         y,
+      createdAtMs:  ms,
+      updatedAtMs:  ms,
+      status:       QuoteStatus.draft,
       customerName: src.customerName,
       customerPhone: src.customerPhone,
-      notes: src.notes,
-      currency: src.currency,
-      lines: src.lines,
+      notes:        src.notes,
+      currency:     src.currency,
+      lines:        src.lines,
       sourceQuoteId: src.id,
-      sourceMode: mode,
+      sourceMode:   mode,
     );
   }
 
