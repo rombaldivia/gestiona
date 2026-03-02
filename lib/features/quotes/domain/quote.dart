@@ -10,6 +10,7 @@ class Quote {
     required this.createdAtMs,
     required this.updatedAtMs,
     required this.status,
+    this.deliveryAtMs,
     this.title,
     this.customerName,
     this.customerPhone,
@@ -32,6 +33,9 @@ class Quote {
   final int createdAtMs;
   final int updatedAtMs;
   final QuoteStatus status;
+
+  /// Fecha de entrega prometida (opcional) en epoch ms
+  final int? deliveryAtMs;
 
   final String? title;       // nombre/descripción de la cotización
   final String? customerName;
@@ -58,6 +62,7 @@ class Quote {
     int? createdAtMs,
     int? updatedAtMs,
     QuoteStatus? status,
+    int? deliveryAtMs,
     String? title,
     String? customerName,
     String? customerPhone,
@@ -75,6 +80,7 @@ class Quote {
       createdAtMs: createdAtMs ?? this.createdAtMs,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       status: status ?? this.status,
+      deliveryAtMs: deliveryAtMs ?? this.deliveryAtMs,
       title: title ?? this.title,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
@@ -94,6 +100,7 @@ class Quote {
     'createdAtMs': createdAtMs,
     'updatedAtMs': updatedAtMs,
     'status': status.name,
+    'deliveryAtMs': deliveryAtMs,
     'title': title,
     'customerName': customerName,
     'customerPhone': customerPhone,
@@ -126,6 +133,7 @@ class Quote {
       createdAtMs: toIntSafe(m['createdAtMs'], 0),
       updatedAtMs: toIntSafe(m['updatedAtMs'], 0),
       status: QuoteStatus.fromString(m['status']?.toString()),
+      deliveryAtMs: m['deliveryAtMs'] == null ? null : toIntSafe(m['deliveryAtMs'], 0),
       title: m['title']?.toString(),
       customerName: m['customerName']?.toString(),
       customerPhone: m['customerPhone']?.toString(),

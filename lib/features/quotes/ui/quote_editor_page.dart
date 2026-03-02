@@ -52,6 +52,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   List<QuoteLine>? _undoLinesSnapshot;
 
   String _phoneE164 = '';
+  int?   _deliveryAtMs;
 
   @override
   void initState() {
@@ -61,7 +62,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     _notesCtrl = TextEditingController(text: widget.quote.notes ?? '');
     _status = widget.quote.status;
     _lines.addAll(widget.quote.lines);
-    _phoneE164 = widget.quote.customerPhone ?? '';
+    _phoneE164    = widget.quote.customerPhone ?? '';
+    _deliveryAtMs = widget.quote.deliveryAtMs;
   }
 
   @override
@@ -131,6 +133,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     final now = DateTime.now().millisecondsSinceEpoch;
     final q = widget.quote.copyWith(
       title:         _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+      deliveryAtMs:  _deliveryAtMs,
       customerName:  _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
       customerPhone: _phoneE164.isEmpty ? null : _phoneE164,
       lines:         _lines,
@@ -163,8 +166,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     );
 
     final wo = template.copyWith(
-      quoteTitle: q.title,
-      steps:      steps,
+      quoteTitle:   q.title,
+      deliveryAtMs: q.deliveryAtMs,
+      steps:        steps,
     );
 
     if (!mounted) return;
@@ -198,6 +202,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     try {
       final q = widget.quote.copyWith(
         title:        _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+        deliveryAtMs: _deliveryAtMs,
         customerName: _customerCtrl.text.trim(),
         customerPhone: _phoneE164.trim(),
         notes: _notesCtrl.text.trim(),
@@ -346,6 +351,11 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
               ),
             ),
             const SizedBox(height: 12),
+            _DeliveryDatePicker(
+              valueMs:   _deliveryAtMs,
+              onChanged: (ms) => setState(() => _deliveryAtMs = ms),
+            ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _customerCtrl,
               decoration: const InputDecoration(labelText: 'Cliente'),
@@ -457,6 +467,70 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Widget: selector de fecha de entrega ──────────────────────────────────────
+class _DeliveryDatePicker extends StatelessWidget {
+  const _DeliveryDatePicker({required this.valueMs, required this.onChanged});
+
+  final int?              valueMs;
+  final void Function(int?) onChanged;
+
+  String get _display {
+    if (valueMs == null) return 'Fecha de entrega (opcional)';
+    final d = DateTime.fromMillisecondsSinceEpoch(valueMs!);
+    return 'Entrega: ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDate = valueMs != null;
+    final color   = hasDate
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            icon:  Icon(Icons.calendar_today_outlined, size: 18, color: color),
+            label: Text(_display, style: TextStyle(color: color)),
+            style: OutlinedButton.styleFrom(
+              alignment:     Alignment.centerLeft,
+              padding:       const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              side:          BorderSide(
+                color: hasDate
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            onPressed: () async {
+              final initial = valueMs != null
+                  ? DateTime.fromMillisecondsSinceEpoch(valueMs!)
+                  : DateTime.now().add(const Duration(days: 7));
+              final picked = await showDatePicker(
+                context:     context,
+                initialDate: initial,
+                firstDate:   DateTime(2020),
+                lastDate:    DateTime(2035),
+              );
+              if (picked != null) {
+                onChanged(picked.millisecondsSinceEpoch);
+              }
+            },
+          ),
+        ),
+        if (hasDate) ...[
+          const SizedBox(width: 6),
+          IconButton(
+            icon:    const Icon(Icons.close, size: 18),
+            tooltip: 'Quitar fecha',
+            onPressed: () => onChanged(null),
+          ),
+        ],
+      ],
     );
   }
 }
