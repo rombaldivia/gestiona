@@ -8,6 +8,13 @@ class WorkOrder {
     required this.createdAtMs,
     required this.updatedAtMs,
     required this.status,
+    this.deliveryAtMs,
+
+    // ✅ Reprogramación de entrega
+    this.previousDeliveryAtMs,
+    this.deliveryRescheduledAtMs,
+    this.rescheduleReason,
+
     this.quoteTitle,
     this.quoteId,
     this.quoteSequence,
@@ -25,9 +32,21 @@ class WorkOrder {
   final int updatedAtMs;
   final WorkOrderStatus status;
 
-  final String? quoteTitle;      // nombre del proyecto
-  final String? quoteId;         // cotización de origen
-  final int? quoteSequence;      // número de la cotización
+  /// Fecha de entrega prometida (opcional) en epoch ms
+  final int? deliveryAtMs;
+
+  /// ✅ Si reprogramas, guardamos la fecha anterior (epoch ms)
+  final int? previousDeliveryAtMs;
+
+  /// ✅ Timestamp de cuándo se reprogramó (epoch ms)
+  final int? deliveryRescheduledAtMs;
+
+  /// ✅ Motivo de reprogramación
+  final String? rescheduleReason;
+
+  final String? quoteTitle; // nombre del proyecto
+  final String? quoteId; // cotización de origen
+  final int? quoteSequence; // número de la cotización
   final String? customerName;
   final String? customerPhone;
   final String? notes;
@@ -47,6 +66,13 @@ class WorkOrder {
     int? createdAtMs,
     int? updatedAtMs,
     WorkOrderStatus? status,
+    int? deliveryAtMs,
+
+    // ✅ Reprogramación de entrega
+    int? previousDeliveryAtMs,
+    int? deliveryRescheduledAtMs,
+    String? rescheduleReason,
+
     String? quoteTitle,
     String? quoteId,
     int? quoteSequence,
@@ -63,6 +89,13 @@ class WorkOrder {
       createdAtMs: createdAtMs ?? this.createdAtMs,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       status: status ?? this.status,
+      deliveryAtMs: deliveryAtMs ?? this.deliveryAtMs,
+
+      previousDeliveryAtMs: previousDeliveryAtMs ?? this.previousDeliveryAtMs,
+      deliveryRescheduledAtMs:
+          deliveryRescheduledAtMs ?? this.deliveryRescheduledAtMs,
+      rescheduleReason: rescheduleReason ?? this.rescheduleReason,
+
       quoteTitle: quoteTitle ?? this.quoteTitle,
       quoteId: quoteId ?? this.quoteId,
       quoteSequence: quoteSequence ?? this.quoteSequence,
@@ -75,21 +108,28 @@ class WorkOrder {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'sequence': sequence,
-    'year': year,
-    'createdAtMs': createdAtMs,
-    'updatedAtMs': updatedAtMs,
-    'status': status.name,
-    'quoteTitle': quoteTitle,
-    'quoteId': quoteId,
-    'quoteSequence': quoteSequence,
-    'customerName': customerName,
-    'customerPhone': customerPhone,
-    'notes': notes,
-    'steps': steps.map((s) => s.toJson()).toList(),
-    'members': members.map((m) => m.toJson()).toList(),
-  };
+        'id': id,
+        'sequence': sequence,
+        'year': year,
+        'createdAtMs': createdAtMs,
+        'updatedAtMs': updatedAtMs,
+        'status': status.name,
+        'deliveryAtMs': deliveryAtMs,
+
+        // ✅ Reprogramación
+        'previousDeliveryAtMs': previousDeliveryAtMs,
+        'deliveryRescheduledAtMs': deliveryRescheduledAtMs,
+        'rescheduleReason': rescheduleReason,
+
+        'quoteTitle': quoteTitle,
+        'quoteId': quoteId,
+        'quoteSequence': quoteSequence,
+        'customerName': customerName,
+        'customerPhone': customerPhone,
+        'notes': notes,
+        'steps': steps.map((s) => s.toJson()).toList(),
+        'members': members.map((m) => m.toJson()).toList(),
+      };
 
   factory WorkOrder.fromJson(Map<String, dynamic> m) {
     int toInt(dynamic v, int fb) =>
@@ -102,6 +142,18 @@ class WorkOrder {
       createdAtMs: toInt(m['createdAtMs'], 0),
       updatedAtMs: toInt(m['updatedAtMs'], 0),
       status: WorkOrderStatus.fromString(m['status']?.toString()),
+      deliveryAtMs:
+          m['deliveryAtMs'] == null ? null : toInt(m['deliveryAtMs'], 0),
+
+      // ✅ Reprogramación
+      previousDeliveryAtMs: m['previousDeliveryAtMs'] == null
+          ? null
+          : toInt(m['previousDeliveryAtMs'], 0),
+      deliveryRescheduledAtMs: m['deliveryRescheduledAtMs'] == null
+          ? null
+          : toInt(m['deliveryRescheduledAtMs'], 0),
+      rescheduleReason: m['rescheduleReason']?.toString(),
+
       quoteTitle: m['quoteTitle']?.toString(),
       quoteId: m['quoteId']?.toString(),
       quoteSequence: m['quoteSequence'] is num
@@ -129,9 +181,9 @@ class WorkOrderStep {
     required this.title,
     this.completed = false,
     this.completedAtMs,
-    this.assignedTo,      // nombre de la persona asignada
-    this.qty,             // cantidad del ítem (de cotización)
-    this.unit,            // unidad
+    this.assignedTo, // nombre de la persona asignada
+    this.qty, // cantidad del ítem (de cotización)
+    this.unit, // unidad
     this.notes,
   });
 
@@ -167,28 +219,28 @@ class WorkOrderStep {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'completed': completed,
-    'completedAtMs': completedAtMs,
-    'assignedTo': assignedTo,
-    'qty': qty,
-    'unit': unit,
-    'notes': notes,
-  };
+        'id': id,
+        'title': title,
+        'completed': completed,
+        'completedAtMs': completedAtMs,
+        'assignedTo': assignedTo,
+        'qty': qty,
+        'unit': unit,
+        'notes': notes,
+      };
 
   factory WorkOrderStep.fromJson(Map<String, dynamic> m) => WorkOrderStep(
-    id: (m['id'] ?? '').toString(),
-    title: (m['title'] ?? '').toString(),
-    completed: m['completed'] == true,
-    completedAtMs: m['completedAtMs'] is num
-        ? (m['completedAtMs'] as num).toInt()
-        : null,
-    assignedTo: m['assignedTo']?.toString(),
-    qty: m['qty'] is num ? (m['qty'] as num).toDouble() : null,
-    unit: m['unit']?.toString(),
-    notes: m['notes']?.toString(),
-  );
+        id: (m['id'] ?? '').toString(),
+        title: (m['title'] ?? '').toString(),
+        completed: m['completed'] == true,
+        completedAtMs: m['completedAtMs'] is num
+            ? (m['completedAtMs'] as num).toInt()
+            : null,
+        assignedTo: m['assignedTo']?.toString(),
+        qty: m['qty'] is num ? (m['qty'] as num).toDouble() : null,
+        unit: m['unit']?.toString(),
+        notes: m['notes']?.toString(),
+      );
 }
 
 // ── Miembro ───────────────────────────────────────────────────────────────────
@@ -212,14 +264,14 @@ class WorkOrderMember {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'role': role,
-  };
+        'id': id,
+        'name': name,
+        'role': role,
+      };
 
   factory WorkOrderMember.fromJson(Map<String, dynamic> m) => WorkOrderMember(
-    id: (m['id'] ?? '').toString(),
-    name: (m['name'] ?? '').toString(),
-    role: m['role']?.toString(),
-  );
+        id: (m['id'] ?? '').toString(),
+        name: (m['name'] ?? '').toString(),
+        role: m['role']?.toString(),
+      );
 }
