@@ -18,7 +18,11 @@ class QuotesPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Cotizaciones')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(context, ref, ctrl.newDraft()),
+        onPressed: () async {
+          final q = await ctrl.newDraft(); // ✅ newDraft() es Future<Quote>
+          if (!context.mounted) return;
+          _openEditor(context, q);
+        },
         icon: const Icon(Icons.add),
         label: const Text('Nueva'),
       ),
@@ -30,8 +34,8 @@ class QuotesPage extends ConsumerWidget {
     );
   }
 
-  void _openEditor(BuildContext context, WidgetRef ref, Quote quote) async {
-    await Navigator.of(
+  void _openEditor(BuildContext context, Quote quote) {
+    Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: quote)));
   }
@@ -142,9 +146,7 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = status == null
-        ? scheme.primary
-        : _statusColor(status!, scheme);
+    final color = status == null ? scheme.primary : _statusColor(status!, scheme);
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -168,11 +170,11 @@ class _FilterChip extends StatelessWidget {
   }
 
   Color _statusColor(QuoteStatus s, ColorScheme scheme) => switch (s) {
-    QuoteStatus.draft => Colors.blueGrey,
-    QuoteStatus.sent => scheme.primary,
-    QuoteStatus.accepted => Colors.green.shade700,
-    QuoteStatus.cancelled => Colors.redAccent,
-  };
+        QuoteStatus.draft => Colors.blueGrey,
+        QuoteStatus.sent => scheme.primary,
+        QuoteStatus.accepted => Colors.green.shade700,
+        QuoteStatus.cancelled => Colors.redAccent,
+      };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -287,7 +289,7 @@ class _QuoteCard extends ConsumerWidget {
                         if (ok == true) await ctrl.delete(quote.id);
                       }
                       if (v == 'duplicate') {
-                        final dup = ctrl.duplicate(quote, mode: 'duplicate');
+                        final dup = await ctrl.duplicate(quote, mode: 'duplicate');
                         if (!context.mounted) return;
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -340,14 +342,14 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
         status.label,
         style: TextStyle(
           color: color,
           fontSize: 12,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

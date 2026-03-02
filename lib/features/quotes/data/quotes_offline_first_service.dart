@@ -30,6 +30,31 @@ class QuotesOfflineFirstService {
     return _local.loadAll(uid: uid, companyId: companyId);
   }
 
+  String? get currentUid => _uid;
+
+  /// Guarda toda la lista local (usado en migración de sequences)
+  Future<void> saveAllLocal({
+    required String companyId,
+    required String uid,
+    required List<Quote> quotes,
+  }) =>
+      _local.saveAll(quotes, uid: uid, companyId: companyId);
+
+  /// Sube sequences corregidos a Firestore para que no vuelvan a llegar con 0
+  Future<void> pushSequencesToCloud({
+    required String companyId,
+    required String uid,
+    required List<Quote> quotes,
+  }) async {
+    for (final q in quotes) {
+      try {
+        await _cloud.upsertQuote(companyId: companyId, uid: uid, quote: q);
+      } catch (_) {
+        // no interrumpir si hay error de red
+      }
+    }
+  }
+
   Stream<List<Quote>> watchCloudQuotes({required String companyId}) {
     return _cloud.watchQuotes(companyId: companyId);
   }
@@ -48,7 +73,15 @@ class QuotesOfflineFirstService {
     for (final cq in cloudQuotes) {
       final lq = map[cq.id];
       if (lq == null || cq.updatedAtMs >= lq.updatedAtMs) {
-        map[cq.id] = cq;
+        // Si Firestore devuelve sequence=0 pero localmente ya tiene
+        // un correlativo correcto, lo preservamos. Esto ocurre cuando
+        // la cotización fue creada antes de que existiera el campo.
+        final seqToKeep = (cq.sequence == 0 && (lq?.sequence ?? 0) > 0)
+            ? lq!.sequence
+            : cq.sequence;
+        map[cq.id] = seqToKeep != cq.sequence
+            ? cq.copyWith(sequence: seqToKeep)
+            : cq;
       }
     }
 

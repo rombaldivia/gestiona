@@ -52,6 +52,7 @@ class _QuoteAddItemSheetState extends State<QuoteAddItemSheet> {
                     controller: controller,
                     itemCount: items.length,
                     itemBuilder: (_, i) {
+                      if (i >= items.length) return const SizedBox.shrink();
                       final it = items[i];
                       final price = it.salePrice ?? 0.0;
                       final hasUsd = (it.usdRate ?? 0) > 0;
