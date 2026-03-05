@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../domain/work_order.dart';
 import '../domain/work_order_status.dart';
 import '../presentation/work_orders_controller.dart';
@@ -16,25 +16,25 @@ class WorkOrderEditorPage extends ConsumerStatefulWidget {
 
 class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
   final _formKey = GlobalKey<FormState>();
-  bool _saving = false;
+  bool _saving   = false;
 
   late final TextEditingController _customerCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _notesCtrl;
 
   WorkOrderStatus _status = WorkOrderStatus.pending;
-  late List<WorkOrderStep> _steps;
+  late List<WorkOrderStep>   _steps;
   late List<WorkOrderMember> _members;
 
   @override
   void initState() {
     super.initState();
     _customerCtrl = TextEditingController(text: widget.order.customerName ?? '');
-    _phoneCtrl = TextEditingController(text: widget.order.customerPhone ?? '');
-    _notesCtrl = TextEditingController(text: widget.order.notes ?? '');
-    _status = widget.order.status;
-    _steps = List.from(widget.order.steps);
-    _members = List.from(widget.order.members);
+    _phoneCtrl    = TextEditingController(text: widget.order.customerPhone ?? '');
+    _notesCtrl    = TextEditingController(text: widget.order.notes ?? '');
+    _status       = widget.order.status;
+    _steps        = List.from(widget.order.steps);
+    _members      = List.from(widget.order.members);
   }
 
   @override
@@ -45,155 +45,137 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
     super.dispose();
   }
 
-  String _fmtDate(int ms) {
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)}';
-  }
-
-  bool get _isDeliveryOverdue {
-    final ms = widget.order.deliveryAtMs;
-    if (ms == null) return false;
-    return DateTime.now().millisecondsSinceEpoch > ms;
-  }
-
-  WorkOrder _buildBase() {
+  WorkOrder _build() {
     final now = DateTime.now().millisecondsSinceEpoch;
     return widget.order.copyWith(
-      customerName:
-          _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
-      customerPhone:
-          _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-      notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-      status: _status,
-      steps: _steps,
-      members: _members,
-      updatedAtMs: now,
+      customerName:  _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
+      customerPhone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+      notes:         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      status:        _status,
+      steps:         _steps,
+      members:       _members,
+      updatedAtMs:   now,
     );
   }
 
-  Future<void> _reprogramDelivery() async {
-    final oldMs = widget.order.deliveryAtMs;
-    if (oldMs == null) return;
-
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year, now.month, now.day),
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 5),
-    );
-    if (picked == null) return;
-
-
-    if (!mounted) return; // ✅ async gap (vamos a usar context en dialog/snack)
-
-    final newMs =
-        DateTime(picked.year, picked.month, picked.day).millisecondsSinceEpoch;
-
-    final reasonCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Reprogramar entrega'),
-        content: TextField(
-          controller: reasonCtrl,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            labelText: 'Motivo (se enviará al cliente)',
-            hintText: 'Ej: retraso de insumos / mantenimiento / corte de luz…',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    if (ok != true) return;
-
-    final reason = reasonCtrl.text.trim();
-    if (reason.isEmpty) {
+  Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(workOrdersControllerProvider.notifier).upsert(_build());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Escribe un motivo para reprogramar.')),
-      );
-      return;
+      Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
+  }
 
-    final woCtrl = ref.read(workOrdersControllerProvider.notifier);
+  String _newId() =>
+      DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
+      (DateTime.now().microsecond).toRadixString(36);
 
-    final updated = _buildBase().copyWith(
-      previousDeliveryAtMs: oldMs,
-      deliveryAtMs: newMs,
-      deliveryRescheduledAtMs: DateTime.now().millisecondsSinceEpoch,
-      rescheduleReason: reason,
-    );
-
-    await woCtrl.upsert(updated);
-
-
-    if (!mounted) return;
-    // WhatsApp no necesita context, pero igual cuidamos mounted para el snackbar
-    final phone = (updated.customerPhone ?? '').replaceAll(' ', '');
-    if (phone.isNotEmpty) {
-      final digits = phone.replaceAll('+', '');
-      final msg = Uri.encodeComponent(
-        'Hola ${updated.customerName ?? ''}. '
-        'Te escribo por la OT #${updated.sequence}-${updated.year}. '
-        'La entrega programada para ${_fmtDate(oldMs)} será reprogramada para ${_fmtDate(newMs)}. '
-        'Motivo: $reason. '
-        'Disculpa las molestias. ¿Te queda bien esa nueva fecha?',
-      );
-      final uri = Uri.parse('https://wa.me/$digits?text=$msg');
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!mounted) return;
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Entrega reprogramada.')),
-    );
+  String _fmtDate(int ms) {
+    final d     = DateTime.fromMillisecondsSinceEpoch(ms);
+    final day   = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    return '$day/$month/${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('OT #${widget.order.sequence}-${widget.order.year}'),
         actions: [
-          IconButton(
-            tooltip: 'Guardar',
-            onPressed: _saving ? null : () async {
-                    final nav = Navigator.of(context);
-                    if (!_formKey.currentState!.validate()) return;
-                    setState(() => _saving = true);
-                    try {
-                      await ref.read(workOrdersControllerProvider.notifier).upsert(_buildBase());
-                      if (!mounted) return;
-                      nav.pop();
-                    } finally {
-                      if (mounted) setState(() => _saving = false);
-                    }
-                  },
-            icon: const Icon(Icons.save),
+          // Selector de estado
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: DropdownButton<WorkOrderStatus>(
+              value: _status,
+              underline: const SizedBox.shrink(),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              items: WorkOrderStatus.values.map((s) => DropdownMenuItem(
+                value: s,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8, height: 8,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle, color: s.color)),
+                    const SizedBox(width: 6),
+                    Text(s.label, style: const TextStyle(fontSize: 13)),
+                  ],
+                ),
+              )).toList(),
+              onChanged: (s) { if (s != null) setState(() => _status = s); },
+            ),
           ),
+          TextButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Guardar'),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
+
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+          padding: const EdgeInsets.all(16),
           children: [
+
+            // ── Cliente ─────────────────────────────────────────────────────
+            TextFormField(
+              controller: _customerCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Cliente',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Teléfono',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+
+            // Cotización origen
+            if (widget.order.quoteSequence != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(children: [
+                  Icon(Icons.request_quote_outlined,
+                      size: 16, color: AppColors.primaryLight),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.order.quoteTitle != null
+                        ? '${widget.order.quoteTitle!} · COT #${widget.order.quoteSequence}-${widget.order.year}'
+                        : 'COT #${widget.order.quoteSequence}-${widget.order.year}',
+                      style: AppTextStyles.label.copyWith(color: AppColors.primaryLight),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+
+            // Fecha de entrega (si existe)
             if (widget.order.deliveryAtMs != null) ...[
+              const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
@@ -204,84 +186,381 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
                 child: Row(children: [
                   const Icon(Icons.event_outlined, size: 16, color: Color(0xFF16A34A)),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Entrega: ${_fmtDate(widget.order.deliveryAtMs!)}',
-                      style: const TextStyle(
-                        color: Color(0xFF16A34A),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
+                  Text(
+                    'Entrega: ${_fmtDate(widget.order.deliveryAtMs!)}',
+                    style: const TextStyle(
+                      color:      Color(0xFF16A34A),
+                      fontWeight: FontWeight.w600,
+                      fontSize:   13,
                     ),
                   ),
                 ]),
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  onPressed: _reprogramDelivery,
-                  icon: const Icon(Icons.event_repeat, size: 18),
-                  label: Text(_isDeliveryOverdue
-                      ? 'Reprogramar (vencida)'
-                      : 'Reprogramar entrega'),
-                ),
-              ),
-              const SizedBox(height: 14),
             ],
 
-            TextFormField(
-              controller: _customerCtrl,
-              decoration: const InputDecoration(labelText: 'Cliente'),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _phoneCtrl,
-              decoration: const InputDecoration(labelText: 'Teléfono'),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Notas'),
-              minLines: 2,
-              maxLines: 6,
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
 
-            DropdownButtonFormField<WorkOrderStatus>(
-              initialValue: _status,
-              items: WorkOrderStatus.values
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
-                  .toList(),
-              onChanged: (v) => setState(() => _status = v ?? _status),
-              decoration: const InputDecoration(labelText: 'Estado'),
+            // ── Etapas ──────────────────────────────────────────────────────
+            Row(
+              children: [
+                Text('Etapas', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () async {
+                    final title = await _showAddDialog(context, 'Nueva etapa', 'Título');
+                    if (title != null && title.isNotEmpty) {
+                      setState(() => _steps.add(
+                        WorkOrderStep(id: _newId(), title: title),
+                      ));
+                    }
+                  },
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Agregar'),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 18),
-            Text('Etapas', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
 
-            ..._steps.map((s) => Card(
-              child: ListTile(
-                title: Text(s.title),
-                leading: Checkbox(
-                  value: s.completed,
-                  onChanged: (v) {
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    setState(() {
-                      final idx = _steps.indexWhere((x) => x.id == s.id);
-                      if (idx < 0) return;
-                      _steps[idx] = s.copyWith(
-                        completed: v ?? false,
-                        completedAtMs: (v ?? false) ? now : null,
-                      );
-                    });
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: _steps.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Sin etapas.', style: AppTextStyles.body),
+                    )
+                  : ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _steps.length,
+                      onReorderItem: (oldIndex, newIndex) {
+                        setState(() {
+                          final step = _steps.removeAt(oldIndex);
+                          _steps.insert(newIndex, step);
+                        });
+                      },
+                      itemBuilder: (_, i) {
+                        final step = _steps[i];
+                        return _StepTile(
+                            key: ValueKey(step.id),
+                            step: step,
+                            members: _members,
+                            onToggle: (v) => setState(() {
+                              _steps[i] = step.copyWith(
+                                completed: v,
+                                completedAtMs: v
+                                    ? DateTime.now().millisecondsSinceEpoch
+                                    : null,
+                              );
+                            }),
+                            onAssign: (name) => setState(() {
+                              _steps[i] = step.copyWith(assignedTo: name);
+                            }),
+                            onRemove: () => setState(() => _steps.removeAt(i)),
+                          );
+                      },
+                    ),
+            ),
+
+            // Barra de progreso
+            if (_steps.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: _steps.isEmpty ? 0 :
+                          _steps.where((s) => s.completed).length / _steps.length,
+                      minHeight: 8,
+                      backgroundColor: AppColors.border,
+                      valueColor: AlwaysStoppedAnimation(_status.color),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${_steps.where((s) => s.completed).length}/${_steps.length} completadas',
+                  style: AppTextStyles.label,
+                ),
+              ]),
+            ],
+
+            const SizedBox(height: 20),
+
+            // ── Personas asignadas ───────────────────────────────────────────
+            Row(
+              children: [
+                Text('Personas', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () async {
+                    final name = await _showAddDialog(context, 'Agregar persona', 'Nombre');
+                    if (name != null && name.isNotEmpty) {
+                      setState(() => _members.add(
+                        WorkOrderMember(id: _newId(), name: name),
+                      ));
+                    }
                   },
+                  icon: const Icon(Icons.person_add_outlined, size: 16),
+                  label: const Text('Agregar'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: _members.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Sin personas asignadas.', style: AppTextStyles.body),
+                    )
+                  : Column(
+                      children: [
+                        for (int i = 0; i < _members.length; i++) ...[
+                          if (i > 0) const Divider(height: 1),
+                          ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                              radius: 18,
+                              child: Text(
+                                _members[i].name.isNotEmpty
+                                    ? _members[i].name[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            title: Text(_members[i].name, style: AppTextStyles.body
+                                .copyWith(color: AppColors.textPrimary)),
+                            subtitle: _members[i].role != null
+                                ? Text(_members[i].role!, style: AppTextStyles.label)
+                                : null,
+                            trailing: GestureDetector(
+                              onTap: () => setState(() => _members.removeAt(i)),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.close,
+                                    size: 18, color: AppColors.textHint),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Notas ────────────────────────────────────────────────────────
+            TextFormField(
+              controller: _notesCtrl,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Notas internas',
+                alignLabelWithHint: true,
+                prefixIcon: Padding(
+                  padding: EdgeInsets.only(bottom: 60),
+                  child: Icon(Icons.notes_outlined),
                 ),
               ),
-            )),
+            ),
+
+            const SizedBox(height: 80),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<String?> _showAddDialog(
+      BuildContext context, String title, String hint) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: InputDecoration(hintText: hint),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Agregar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Tile de etapa con asignación ──────────────────────────────────────────────
+class _StepTile extends StatelessWidget {
+  const _StepTile({
+    super.key,
+    required this.step,
+    required this.members,
+    required this.onToggle,
+    required this.onAssign,
+    required this.onRemove,
+  });
+
+  final WorkOrderStep       step;
+  final List<WorkOrderMember> members;
+  final ValueChanged<bool>  onToggle;
+  final ValueChanged<String?> onAssign;
+  final VoidCallback        onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      decoration: BoxDecoration(
+        color: step.completed
+            ? AppColors.success.withValues(alpha: 0.05)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(
+          color: step.completed
+              ? AppColors.success.withValues(alpha: 0.3)
+              : AppColors.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fila principal: checkbox + título + drag + delete
+          Row(
+            children: [
+              Checkbox(
+                value: step.completed,
+                activeColor: AppColors.success,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                onChanged: (v) => onToggle(v ?? false),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.title,
+                      style: AppTextStyles.body.copyWith(
+                        color: step.completed
+                            ? AppColors.textHint
+                            : AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        decoration: step.completed
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    // Cantidad y unidad (viene de la cotización)
+                    if (step.qty != null)
+                      Text(
+                        '${step.qty!.toStringAsFixed(step.qty == step.qty!.roundToDouble() ? 0 : 2)} ${step.unit ?? 'und'}',
+                        style: AppTextStyles.label.copyWith(
+                            color: AppColors.textSecondary),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.drag_handle, color: AppColors.textHint),
+              GestureDetector(
+                onTap: onRemove,
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.close, size: 16, color: AppColors.textHint),
+                ),
+              ),
+            ],
+          ),
+
+          // Asignar persona
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: members.isEmpty
+                ? Text('Agrega personas arriba para asignar',
+                    style: AppTextStyles.label.copyWith(
+                        color: AppColors.textHint, fontSize: 11))
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: step.assignedTo,
+                      hint: Row(children: [
+                        Icon(Icons.person_add_outlined,
+                            size: 13, color: AppColors.textHint),
+                        const SizedBox(width: 4),
+                        Text('Asignar a…',
+                            style: AppTextStyles.label.copyWith(
+                                color: AppColors.textHint, fontSize: 12)),
+                      ]),
+                      isExpanded: true,
+                      isDense: true,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Sin asignar'),
+                        ),
+                        ...members.map((m) => DropdownMenuItem<String?>(
+                              value: m.name,
+                              child: Row(children: [
+                                CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor:
+                                      scheme.primary.withValues(alpha: 0.12),
+                                  child: Text(
+                                    m.name.isNotEmpty
+                                        ? m.name[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: scheme.primary,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(m.name, style: AppTextStyles.label),
+                              ]),
+                            )),
+                      ],
+                      onChanged: onAssign,
+                    ),
+                  ),
+          ),
+
+          // Persona asignada visible
+          if ((step.assignedTo ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Row(children: [
+                Icon(Icons.person_outline,
+                    size: 13, color: scheme.primary),
+                const SizedBox(width: 4),
+                Text(step.assignedTo!,
+                    style: AppTextStyles.label.copyWith(
+                        color: scheme.primary, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+        ],
       ),
     );
   }

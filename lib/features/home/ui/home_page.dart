@@ -8,6 +8,7 @@ import '../../subscription/presentation/entitlements_scope.dart';
 import '../../inventory/ui/inventory_page.dart';
 import '../../quotes/ui/quotes_tabs_page.dart';
 import '../../work_orders/ui/work_orders_page.dart';
+import '../../gemini/ui/gemini_chat_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -91,6 +92,16 @@ class HomePage extends StatelessWidget {
         ],
       ),
 
+      extendBody: true,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const GeminiChatPage()),
+        ),
+        backgroundColor: const Color(0xFF1565C0),
+        icon:  const Icon(Icons.auto_awesome, color: Colors.white),
+        label: const Text('Asistente IA',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
