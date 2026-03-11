@@ -1,0 +1,39 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+*.log
+
+# Android/Gradle
+android/.gradle/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/**/key.properties
+**/*.jks
+**/*.keystore
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Firebase (NO subas secretos)
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Flutter tooling
+.flutter-plugins-dependencies
+.flutter-plugins

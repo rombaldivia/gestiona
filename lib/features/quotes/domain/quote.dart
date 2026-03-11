@@ -1,0 +1,148 @@
+import 'quote_line.dart';
+import 'quote_status.dart';
+import 'quote_step.dart';
+
+class Quote {
+  Quote({
+    required this.id,
+    required this.sequence,
+    required this.year,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.status,
+    this.deliveryAtMs,
+    this.title,
+    this.customerName,
+    this.customerPhone,
+    this.notes,
+    required this.currency,
+    required this.lines,
+    this.steps = const [],
+    this.sourceQuoteId,
+    this.sourceMode, // "duplicate" | "requote"
+  });
+
+  final String id;
+
+  /// Correlativo humano: 1,2,3...
+  final int sequence;
+
+  /// Para reset anual del correlativo (recomendado)
+  final int year;
+
+  final int createdAtMs;
+  final int updatedAtMs;
+  final QuoteStatus status;
+
+  /// Fecha de entrega prometida (opcional) en epoch ms
+  final int? deliveryAtMs;
+
+  final String? title;       // nombre/descripción de la cotización
+  final String? customerName;
+  final String? customerPhone;
+  final String? notes;
+
+  final String currency; // "BOB" por ahora
+  final List<QuoteLine> lines;
+
+  /// ✅ Proceso dentro de la cotización
+  final List<QuoteProcessStep> steps;
+
+  // versionado
+  final String? sourceQuoteId;
+  final String? sourceMode;
+
+  double get subtotalBob => lines.fold(0.0, (a, l) => a + l.lineTotalBob);
+  double get totalBob => subtotalBob;
+
+  Quote copyWith({
+    String? id,
+    int? sequence,
+    int? year,
+    int? createdAtMs,
+    int? updatedAtMs,
+    QuoteStatus? status,
+    int? deliveryAtMs,
+    String? title,
+    String? customerName,
+    String? customerPhone,
+    String? notes,
+    String? currency,
+    List<QuoteLine>? lines,
+    List<QuoteProcessStep>? steps,
+    String? sourceQuoteId,
+    String? sourceMode,
+  }) {
+    return Quote(
+      id: id ?? this.id,
+      sequence: sequence ?? this.sequence,
+      year: year ?? this.year,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      status: status ?? this.status,
+      deliveryAtMs: deliveryAtMs ?? this.deliveryAtMs,
+      title: title ?? this.title,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      notes: notes ?? this.notes,
+      currency: currency ?? this.currency,
+      lines: lines ?? this.lines,
+      steps: steps ?? this.steps,
+      sourceQuoteId: sourceQuoteId ?? this.sourceQuoteId,
+      sourceMode: sourceMode ?? this.sourceMode,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sequence': sequence,
+    'year': year,
+    'createdAtMs': createdAtMs,
+    'updatedAtMs': updatedAtMs,
+    'status': status.name,
+    'deliveryAtMs': deliveryAtMs,
+    'title': title,
+    'customerName': customerName,
+    'customerPhone': customerPhone,
+    'notes': notes,
+    'currency': currency,
+    'lines': lines.map((e) => e.toJson()).toList(),
+    'steps': steps.map((e) => e.toJson()).toList(),
+    'sourceQuoteId': sourceQuoteId,
+    'sourceMode': sourceMode,
+  };
+
+  factory Quote.fromJson(Map<String, dynamic> m) {
+    final lines = (m['lines'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map((e) => QuoteLine.fromJson(e))
+        .toList();
+
+    final steps = (m['steps'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map((e) => QuoteProcessStep.fromJson(e))
+        .toList();
+
+    int toIntSafe(dynamic v, int fallback) =>
+        v is num ? v.toInt() : int.tryParse('$v') ?? fallback;
+
+    return Quote(
+      id: (m['id'] ?? '').toString(),
+      sequence: toIntSafe(m['sequence'], 0),
+      year: toIntSafe(m['year'], DateTime.now().year),
+      createdAtMs: toIntSafe(m['createdAtMs'], 0),
+      updatedAtMs: toIntSafe(m['updatedAtMs'], 0),
+      status: QuoteStatus.fromString(m['status']?.toString()),
+      deliveryAtMs: m['deliveryAtMs'] == null ? null : toIntSafe(m['deliveryAtMs'], 0),
+      title: m['title']?.toString(),
+      customerName: m['customerName']?.toString(),
+      customerPhone: m['customerPhone']?.toString(),
+      notes: m['notes']?.toString(),
+      currency: (m['currency'] ?? 'BOB').toString(),
+      lines: lines,
+      steps: steps,
+      sourceQuoteId: m['sourceQuoteId']?.toString(),
+      sourceMode: m['sourceMode']?.toString(),
+    );
+  }
+}

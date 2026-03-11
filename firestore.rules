@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    function companyDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId));
+    }
+
+    function isOwner(companyId) {
+      return signedIn() && companyDoc(companyId).data.ownerUid == request.auth.uid;
+    }
+
+    function isMemberSub(companyId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+
+    function isMemberTop(companyId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + '_' + companyId));
+    }
+
+    function isMember(companyId) {
+      return isMemberSub(companyId) || isMemberTop(companyId);
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
+
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.plan == resource.data.plan;
+
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow read: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      allow update, delete: if signedIn() && isOwner(companyId);
+
+      match /members/{uid} {
+        allow read: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
+        allow create, delete: if signedIn() && isOwner(companyId);
+        allow update: if false;
+      }
+
+      match /inventory_items/{docId} {
+        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      }
+
+      match /stock_movements/{docId} {
+        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      }
+
+      // ✅ NUEVO: QUOTES
+      match /quotes/{quoteId} {
+        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      }
+    }
+
+    match /company_members/{memberDoc} {
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && request.resource.data.uid is string
+        && isOwner(request.resource.data.companyId);
+
+      allow read: if signedIn() &&
+        (companyDoc(resource.data.companyId).data.ownerUid == request.auth.uid
+         || request.auth.uid == resource.data.uid);
+
+      allow delete: if signedIn()
+        && companyDoc(resource.data.companyId).data.ownerUid == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
