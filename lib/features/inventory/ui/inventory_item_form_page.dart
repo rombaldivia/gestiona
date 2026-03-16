@@ -480,10 +480,13 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     final showUsdProtector =
         _effectivePro && _kind != InventoryItemKind.servicio;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop) _save(); },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
-        actions: [TextButton(onPressed: _save, child: const Text('Guardar'))],
+        leading: BackButton(onPressed: _save),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -603,13 +606,6 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             const SizedBox(height: 8),
           ],
 
-          TextField(
-            controller: _price,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(labelText: _priceLabel),
-          ),
-          const SizedBox(height: 12),
-
           if (_kind != InventoryItemKind.servicio) ...[
             if (_effectivePro) ...[
               InputDecorator(
@@ -635,6 +631,16 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
               ),
               const SizedBox(height: 12),
             ],
+          ],
+
+          TextField(
+            controller: _price,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: _priceLabel),
+          ),
+          const SizedBox(height: 12),
+
+          if (_kind != InventoryItemKind.servicio) ...[
 
             if (!_effectivePro || _costCurrency == 'bob') ...[
               TextField(
@@ -660,6 +666,56 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
               const SizedBox(height: 12),
             ],
           ],
+
+          if (_supportsMargin) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Margen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      _effectivePro
+                          ? 'Calcular margen'
+                          : 'Calcular margen (PRO)',
+                    ),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: _calcMargin,
+                      onChanged: _effectivePro
+                          ? (v) {
+                              setState(() => _calcMargin = v);
+                              if (!v) _markup.clear();
+                              if (v) _onPriceChanged();
+                            }
+                          : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (_calcMargin && _effectivePro) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _markup,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: '% margen',
+                  suffixText: '%',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              const SizedBox(height: 12),
+            ],
+          ],
+
 
           if (showUsdProtector) ...[
             const Divider(),
@@ -765,55 +821,6 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
             ],
           ],
 
-          if (_supportsMargin) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Margen',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      _effectivePro
-                          ? 'Calcular margen'
-                          : 'Calcular margen (PRO)',
-                    ),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: _calcMargin,
-                      onChanged: _effectivePro
-                          ? (v) {
-                              setState(() => _calcMargin = v);
-                              if (!v) _markup.clear();
-                              if (v) _onPriceChanged();
-                            }
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            if (_calcMargin && _effectivePro) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _markup,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: '% margen',
-                  suffixText: '%',
-                ),
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              const SizedBox(height: 12),
-            ],
-          ],
-
           if (_supportsStock) ...[
             TextField(
               controller: _min,
@@ -827,6 +834,7 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
           ],
         ],
       ),
+    ),
     );
   }
 }

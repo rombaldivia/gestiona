@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
 import '../../company/presentation/company_providers.dart';
-import '../data/work_orders_local_store.dart';
+import '../../subscription/presentation/entitlements_providers.dart';
+import '../data/work_orders_offline_first_service.dart';
 import '../domain/work_order.dart';
 import '../domain/work_order_status.dart';
 import 'work_orders_state.dart';
@@ -13,10 +16,11 @@ final workOrdersControllerProvider =
     );
 
 class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
-  final _store = WorkOrdersLocalStore();
+  final _service = WorkOrdersOfflineFirstService();
 
   String? _companyId;
   String? _uid;
+  StreamSubscription<List<WorkOrder>>? _cloudSub;
 
   static const _empty = WorkOrdersState(orders: []);
 
@@ -32,22 +36,66 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
     _companyId = cid;
     _uid       = user.uid;
 
-    final orders = await _store.loadAll(uid: _uid, companyId: _companyId);
+    // Cargar local primero
+    final orders = await _service.listOrders(companyId: cid);
+
+    // Escuchar cloud si tiene sync
+    final ent = await ref.read(entitlementsProvider(user.uid).future);
+    if (ent.cloudSync) {
+      _cloudSub?.cancel();
+      _cloudSub = _service.watchCloudOrders(companyId: cid).listen((cloudOrders) async {
+        await _service.applyCloudToLocal(
+          companyId:   cid,
+          cloudOrders: cloudOrders,
+        );
+        final updated = await _service.listOrders(companyId: cid);
+        final cur = state.asData?.value ?? _empty;
+        state = AsyncData(cur.copyWith(orders: updated));
+      });
+
+      ref.onDispose(() => _cloudSub?.cancel());
+    }
+
     return WorkOrdersState(orders: orders);
   }
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
 
   Future<void> upsert(WorkOrder wo) async {
-    await _store.upsert(wo, uid: _uid, companyId: _companyId);
+    final cid = _companyId;
+    if (cid == null) return;
+
+    final ent = await ref.read(entitlementsProvider(_uid ?? '').future);
+    await _service.upsertOfflineFirst(
+      companyId: cid,
+      order:     wo,
+      ent:       ent,
+    );
+
     final cur = state.asData?.value ?? _empty;
     state = AsyncData(cur.copyWith(orders: await _loadAll()));
   }
 
   Future<void> delete(String id) async {
-    await _store.deleteById(id, uid: _uid, companyId: _companyId);
+    final cid = _companyId;
+    if (cid == null) return;
+
+    final ent = await ref.read(entitlementsProvider(_uid ?? '').future);
+    await _service.deleteOfflineFirst(
+      companyId: cid,
+      orderId:   id,
+      ent:       ent,
+    );
+
     final cur = state.asData?.value ?? _empty;
     state = AsyncData(cur.copyWith(orders: await _loadAll()));
+  }
+
+  Future<int> syncPending() async {
+    final cid = _companyId;
+    if (cid == null) return 0;
+    final ent = await ref.read(entitlementsProvider(_uid ?? '').future);
+    return _service.syncPending(companyId: cid, ent: ent);
   }
 
   // ── Factory ───────────────────────────────────────────────────────────────
@@ -86,16 +134,11 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
     );
   }
 
-  // ── Filtros y búsqueda ────────────────────────────────────────────────────
+  // ── Filtros ───────────────────────────────────────────────────────────────
 
   void setFilter(WorkOrderStatus? s) {
     final cur = state.asData?.value ?? _empty;
-    state = AsyncData(
-      cur.copyWith(
-        filterStatus: s,
-        clearFilter: s == null,
-      ),
-    );
+    state = AsyncData(cur.copyWith(filterStatus: s, clearFilter: s == null));
   }
 
   void setQuery(String q) {
@@ -106,7 +149,7 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Future<List<WorkOrder>> _loadAll() =>
-      _store.loadAll(uid: _uid, companyId: _companyId);
+      _service.listOrders(companyId: _companyId ?? '');
 
   String _newId() =>
       DateTime.now().millisecondsSinceEpoch.toRadixString(36) +

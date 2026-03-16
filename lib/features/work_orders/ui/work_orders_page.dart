@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -95,7 +96,7 @@ class _Body extends ConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   itemCount: orders.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  separatorBuilder: (context, index) => const SizedBox(height: 10),
                   itemBuilder: (_, i) => _OrderCard(order: orders[i], ctrl: ctrl),
                 ),
         ),
@@ -200,7 +201,60 @@ class _OrderCard extends ConsumerWidget {
                   ),
                 ]),
               ],
-              const SizedBox(height: 8),
+              // Banner de atraso
+              Builder(builder: (context) {
+                final now = DateTime.now();
+                final isLate = order.deliveryAtMs != null &&
+                    DateTime.fromMillisecondsSinceEpoch(order.deliveryAtMs!)
+                        .isBefore(now) &&
+                    order.status != WorkOrderStatus.done &&
+                    order.status != WorkOrderStatus.delivered;
+                if (!isLate) return const SizedBox(height: 8);
+                final d = DateTime.fromMillisecondsSinceEpoch(order.deliveryAtMs!);
+                final days = now.difference(d).inDays;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.redAccent),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            days == 0 ? 'Vence hoy'
+                                : 'Atrasada $days día${days != 1 ? 's' : ''}',
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () async {
+                            await _showRescheduleDialog(context, ctrl, order);
+                          },
+                          child: const Text('Reprogramar',
+                              style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              }),
               Row(children: [
                 if (order.members.isNotEmpty) ...[
                   Icon(Icons.group_outlined, size: 14, color: AppColors.textSecondary),
@@ -214,7 +268,9 @@ class _OrderCard extends ConsumerWidget {
                 PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert, size: 18, color: AppColors.textSecondary),
                   onSelected: (v) async {
-                    if (v == 'delete') {
+                    if (v == 'reschedule') {
+                      await _showRescheduleDialog(context, ctrl, order);
+                    } else if (v == 'delete') {
                       final ok = await showDialog<bool>(
                         context: context,
                         builder: (_) => AlertDialog(
@@ -231,8 +287,11 @@ class _OrderCard extends ConsumerWidget {
                       if (ok == true) await ctrl.delete(order.id);
                     }
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'delete',
+                  itemBuilder: (_) => [
+                    if (order.deliveryAtMs != null)
+                      const PopupMenuItem(value: 'reschedule',
+                          child: Text('Reprogramar entrega')),
+                    const PopupMenuItem(value: 'delete',
                         child: Text('Eliminar', style: TextStyle(color: Colors.redAccent))),
                   ],
                 ),
@@ -262,5 +321,92 @@ class _StatusBadge extends StatelessWidget {
       child: Text(status.label,
           style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
+  }
+}
+
+Future<void> _showRescheduleDialog(
+  BuildContext context,
+  WorkOrdersController ctrl,
+  WorkOrder order,
+) async {
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: DateTime.now().add(const Duration(days: 1)),
+    firstDate: DateTime.now(),
+    lastDate: DateTime(2035),
+    helpText: 'Nueva fecha de entrega',
+  );
+  if (picked == null || !context.mounted) return;
+
+  final day   = picked.day.toString().padLeft(2, '0');
+  final month = picked.month.toString().padLeft(2, '0');
+  final dateStr = '$day/$month/${picked.year}';
+
+  final msgCtrl = TextEditingController(
+    text: 'Estimado cliente, le informamos que su orden de trabajo '
+        '${order.quoteTitle != null ? '"${order.quoteTitle}" ' : ''}'
+        'ha sido reprogramada para el $dateStr. '
+        'Disculpe los inconvenientes.',
+  );
+
+  final hasPhone = (order.customerPhone ?? '').isNotEmpty;
+
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Reprogramar entrega'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Nueva fecha: $dateStr',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: msgCtrl,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Mensaje al cliente',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (!hasPhone) ...[
+            const SizedBox(height: 8),
+            const Text('⚠️ Esta OT no tiene teléfono.',
+                style: TextStyle(fontSize: 12, color: Colors.orange)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar'),
+        ),
+        if (hasPhone)
+          OutlinedButton.icon(
+            icon: const Icon(Icons.save_outlined, size: 16),
+            label: const Text('Solo guardar'),
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+        FilledButton.icon(
+          icon: const Icon(Icons.send, size: 16),
+          label: Text(hasPhone ? 'Guardar y enviar' : 'Guardar'),
+          onPressed: () => Navigator.pop(ctx, true),
+        ),
+      ],
+    ),
+  );
+
+  if (result == null || !context.mounted) return;
+
+  await ctrl.upsert(order.copyWith(
+    deliveryAtMs: picked.millisecondsSinceEpoch,
+  ));
+
+  if (result && hasPhone) {
+    final digits = order.customerPhone!.replaceAll('+', '');
+    final uri = Uri.parse(
+        'https://wa.me/$digits?text=${Uri.encodeComponent(msgCtrl.text.trim())}');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

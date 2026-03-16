@@ -14,6 +14,8 @@ class Quote {
     this.title,
     this.customerName,
     this.customerPhone,
+    this.customerNit,
+    this.billToName,
     this.notes,
     required this.currency,
     required this.lines,
@@ -40,6 +42,8 @@ class Quote {
   final String? title;       // nombre/descripción de la cotización
   final String? customerName;
   final String? customerPhone;
+  final String? customerNit;   // NIT o CI
+  final String? billToName;   // Factura a nombre de
   final String? notes;
 
   final String currency; // "BOB" por ahora
@@ -66,6 +70,8 @@ class Quote {
     String? title,
     String? customerName,
     String? customerPhone,
+    String? customerNit,
+    String? billToName,
     String? notes,
     String? currency,
     List<QuoteLine>? lines,
@@ -84,6 +90,8 @@ class Quote {
       title: title ?? this.title,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
+      customerNit:  customerNit  ?? this.customerNit,
+      billToName:   billToName   ?? this.billToName,
       notes: notes ?? this.notes,
       currency: currency ?? this.currency,
       lines: lines ?? this.lines,
@@ -104,6 +112,8 @@ class Quote {
     'title': title,
     'customerName': customerName,
     'customerPhone': customerPhone,
+    'customerNit':  customerNit,
+    'billToName':   billToName,
     'notes': notes,
     'currency': currency,
     'lines': lines.map((e) => e.toJson()).toList(),
@@ -137,6 +147,8 @@ class Quote {
       title: m['title']?.toString(),
       customerName: m['customerName']?.toString(),
       customerPhone: m['customerPhone']?.toString(),
+      customerNit:  m['customerNit']?.toString(),
+      billToName:   m['billToName']?.toString(),
       notes: m['notes']?.toString(),
       currency: (m['currency'] ?? 'BOB').toString(),
       lines: lines,
