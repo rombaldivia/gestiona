@@ -16,7 +16,6 @@ class WorkOrderEditorPage extends ConsumerStatefulWidget {
 
 class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
   final _formKey = GlobalKey<FormState>();
-  bool _saving   = false;
 
   late final TextEditingController _customerCtrl;
   late final TextEditingController _phoneCtrl;
@@ -60,13 +59,11 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
     try {
       await ref.read(workOrdersControllerProvider.notifier).upsert(_build());
       if (!mounted) return;
       Navigator.pop(context);
     } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -85,7 +82,12 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) await _save();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text('OT #${widget.order.sequence}-${widget.order.year}'),
         actions: [
@@ -112,14 +114,6 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
               onChanged: (s) { if (s != null) setState(() => _status = s); },
             ),
           ),
-          TextButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Guardar'),
-          ),
-          const SizedBox(width: 8),
         ],
       ),
 
@@ -379,6 +373,7 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
           ],
         ),
       ),
+    ),
     );
   }
 
