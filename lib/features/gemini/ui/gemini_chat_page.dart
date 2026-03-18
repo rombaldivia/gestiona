@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/chat_message.dart';
+import '../domain/gemini_action.dart';
 import '../presentation/gemini_chat_controller.dart';
 
 class GeminiChatPage extends ConsumerStatefulWidget {
@@ -82,13 +83,26 @@ class _GeminiChatPageState extends ConsumerState<GeminiChatPage> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error:   (e, _) => Center(child: Text('Error: $e')),
         data:    (state) => _ChatBody(
-          state:      state,
-          scrollCtrl: _scrollCtrl,
-          inputCtrl:  _inputCtrl,
-          onSend:     _send,
-          onSetupKey: () => _showKeyDialog(context),
+          state:           state,
+          scrollCtrl:      _scrollCtrl,
+          inputCtrl:       _inputCtrl,
+          onSend:          _send,
+          onSetupKey:      () => _showKeyDialog(context),
+          onConfirmAction: (action) => _executeAction(context, action),
+          onDismissAction: () => ref.read(geminiChatProvider.notifier).clearPendingAction(),
         ),
       ),
+    );
+  }
+
+  Future<void> _executeAction(BuildContext context, GeminiAction action) async {
+    final ctrl      = ref.read(geminiChatProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+    ctrl.clearPendingAction();
+    final result = await ctrl.executeAction(action);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(result), backgroundColor: AppColors.success),
     );
   }
 
@@ -140,13 +154,17 @@ class _ChatBody extends StatelessWidget {
     required this.inputCtrl,
     required this.onSend,
     required this.onSetupKey,
+    required this.onConfirmAction,
+    required this.onDismissAction,
   });
 
-  final GeminiChatState    state;
-  final ScrollController   scrollCtrl;
-  final TextEditingController inputCtrl;
-  final VoidCallback       onSend;
-  final VoidCallback       onSetupKey;
+  final GeminiChatState         state;
+  final ScrollController        scrollCtrl;
+  final TextEditingController   inputCtrl;
+  final VoidCallback            onSend;
+  final VoidCallback            onSetupKey;
+  final void Function(GeminiAction) onConfirmAction;
+  final VoidCallback            onDismissAction;
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +194,14 @@ class _ChatBody extends StatelessWidget {
                   itemBuilder: (_, i) => _MessageBubble(msg: state.messages[i]),
                 ),
         ),
+
+        // Acción pendiente — card de confirmación
+        if (state.pendingAction != null)
+          _ActionConfirmCard(
+            action:    state.pendingAction!,
+            onConfirm: () => onConfirmAction(state.pendingAction!),
+            onDismiss: onDismissAction,
+          ),
 
         // Input
         _InputBar(
@@ -534,6 +560,81 @@ class _ApiKeyDialogState extends State<_ApiKeyDialog> {
               : const Text('Guardar'),
         ),
       ],
+    );
+  }
+}
+
+// ── Card de confirmación de acción ────────────────────────────────────────────
+
+class _ActionConfirmCard extends StatelessWidget {
+  const _ActionConfirmCard({
+    required this.action,
+    required this.onConfirm,
+    required this.onDismiss,
+  });
+
+  final GeminiAction action;
+  final VoidCallback onConfirm;
+  final VoidCallback onDismiss;
+
+  IconData get _icon {
+    switch (action.type) {
+      case GeminiActionType.createQuote:       return Icons.request_quote_outlined;
+      case GeminiActionType.createWorkOrder:   return Icons.engineering_outlined;
+      case GeminiActionType.addInventoryItem:  return Icons.inventory_2_outlined;
+      case GeminiActionType.changeQuoteStatus: return Icons.swap_horiz_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF90CAF9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(_icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                action.description,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 16),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: onDismiss,
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Spacer(),
+            TextButton(
+              onPressed: onDismiss,
+              child: const Text('Cancelar'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: onConfirm,
+              icon:  const Icon(Icons.check, size: 16),
+              label: const Text('Confirmar'),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 }
