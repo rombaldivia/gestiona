@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/activity/activity_provider.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
 import '../../company/presentation/company_providers.dart';
@@ -192,6 +193,13 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       dirty: true,
     );
 
+    final sign = delta > 0 ? '+' : '';
+    ref.read(activityProvider.notifier).log(ActivityEvent.make(
+      module: ActivityModule.inventory,
+      verb:   delta > 0 ? ActivityVerb.stockIn : ActivityVerb.stockOut,
+      label:  itemId,
+      detail: '${sign}${delta.toStringAsFixed(0)} unidades',
+    )).ignore();
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
       itemId: itemId,
