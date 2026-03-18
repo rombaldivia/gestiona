@@ -192,6 +192,7 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       dirty: true,
     );
+<<<<<<< HEAD
 
     final sign = delta > 0 ? '+' : '';
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
@@ -200,6 +201,8 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       label:  itemId,
       detail: '$sign${delta.toStringAsFixed(0)} unidades',
     )).ignore();
+=======
+>>>>>>> origin/main
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
       itemId: itemId,

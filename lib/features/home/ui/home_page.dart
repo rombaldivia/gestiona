@@ -258,6 +258,39 @@ class HomePage extends ConsumerWidget {
                 ],
               ),
             ),
+<<<<<<< HEAD
+=======
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.textHint.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: const Icon(
+                      Icons.history_rounded,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Aún no hay actividad reciente.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+>>>>>>> origin/main
         ],
       ),
     );
@@ -352,6 +385,7 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
+<<<<<<< HEAD
 
 // ── Ítem de evento real ───────────────────────────────────────────────────────
 class _ActivityEventItem extends StatelessWidget {
@@ -483,3 +517,6 @@ class _ActivityEventItem extends StatelessWidget {
     );
   }
 }
+=======
+// ── Ítem de actividad ─────────────────────────────────────────────────────────
+>>>>>>> origin/main
