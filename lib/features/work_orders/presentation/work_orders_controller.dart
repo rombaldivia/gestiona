@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/activity/activity_provider.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
 import '../../company/presentation/company_providers.dart';
@@ -62,6 +63,13 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
   // ── CRUD ──────────────────────────────────────────────────────────────────
 
   Future<void> upsert(WorkOrder wo) async {
+    final existing = state.value?.orders.any((e) => e.id == wo.id) ?? false;
+    ref.read(activityProvider.notifier).log(ActivityEvent.make(
+      module: ActivityModule.workOrder,
+      verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
+      label:  'OT #${wo.sequence}-${wo.year}',
+      detail: wo.customerName ?? wo.status.label,
+    )).ignore();
     final cid = _companyId;
     if (cid == null) return;
 
@@ -77,6 +85,15 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
   }
 
   Future<void> delete(String id) async {
+    final wo = state.value?.orders.where((e) => e.id == id).firstOrNull;
+    if (wo != null) {
+      ref.read(activityProvider.notifier).log(ActivityEvent.make(
+        module: ActivityModule.workOrder,
+        verb:   ActivityVerb.deleted,
+        label:  'OT #${wo.sequence}-${wo.year}',
+        detail: wo.customerName ?? 'eliminada',
+      )).ignore();
+    }
     final cid = _companyId;
     if (cid == null) return;
 
