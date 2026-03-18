@@ -198,7 +198,7 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       module: ActivityModule.inventory,
       verb:   delta > 0 ? ActivityVerb.stockIn : ActivityVerb.stockOut,
       label:  itemId,
-      detail: '${sign}${delta.toStringAsFixed(0)} unidades',
+      detail: '$sign${delta.toStringAsFixed(0)} unidades',
     )).ignore();
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
