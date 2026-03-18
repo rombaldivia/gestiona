@@ -63,6 +63,7 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
   // ── CRUD ──────────────────────────────────────────────────────────────────
 
   Future<void> upsert(WorkOrder wo) async {
+<<<<<<< HEAD
     final existing = state.value?.orders.any((e) => e.id == wo.id) ?? false;
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
       module: ActivityModule.workOrder,
@@ -70,6 +71,8 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
       label:  'OT #${wo.sequence}-${wo.year}',
       detail: wo.customerName ?? wo.status.label,
     )).ignore();
+=======
+>>>>>>> origin/main
     final cid = _companyId;
     if (cid == null) return;
 
@@ -85,6 +88,7 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
   }
 
   Future<void> delete(String id) async {
+<<<<<<< HEAD
     final wo = state.value?.orders.where((e) => e.id == id).firstOrNull;
     if (wo != null) {
       ref.read(activityProvider.notifier).log(ActivityEvent.make(
@@ -94,6 +98,8 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
         detail: wo.customerName ?? 'eliminada',
       )).ignore();
     }
+=======
+>>>>>>> origin/main
     final cid = _companyId;
     if (cid == null) return;
 
