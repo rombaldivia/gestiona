@@ -191,7 +191,6 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       dirty: true,
     );
-
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
       itemId: itemId,

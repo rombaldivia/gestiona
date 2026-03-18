@@ -216,30 +216,34 @@ class HomePage extends StatelessWidget {
               border: Border.all(color: AppColors.border),
               boxShadow: AppShadows.card,
             ),
-            child: const Column(
-              children: [
-                _ActivityItem(
-                  icon: Icons.check_circle_outline_rounded,
-                  color: AppColors.success,
-                  title: 'COT-1023 aprobada',
-                  subtitle: '09:30 · Cotizaciones',
-                ),
-                Divider(height: 1),
-                _ActivityItem(
-                  icon: Icons.build_circle_outlined,
-                  color: AppColors.workOrders,
-                  title: 'OT-231 en producción',
-                  subtitle: '09:50 · Órdenes de trabajo',
-                ),
-                Divider(height: 1),
-                _ActivityItem(
-                  icon: Icons.payments_outlined,
-                  color: AppColors.billing,
-                  title: 'FAC-2010 pagada',
-                  subtitle: '10:15 · Facturación',
-                  isLast: true,
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.textHint.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: const Icon(
+                      Icons.history_rounded,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Aún no hay actividad reciente.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -332,50 +336,3 @@ class _ModuleCard extends StatelessWidget {
 }
 
 // ── Ítem de actividad ─────────────────────────────────────────────────────────
-class _ActivityItem extends StatelessWidget {
-  const _ActivityItem({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    this.isLast = false,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, isLast ? 12 : 12),
-      child: Row(
-        children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
-                Text(subtitle, style: AppTextStyles.label),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
