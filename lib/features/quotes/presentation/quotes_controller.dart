@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/activity/activity_provider.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
 import '../../company/data/company_cloud_service.dart';
@@ -219,6 +220,13 @@ class QuotesController extends AsyncNotifier<QuotesState> {
   }
 
   Future<void> upsert(Quote q) async {
+    final existing = state.value?.quotes.any((e) => e.id == q.id) ?? false;
+    ref.read(activityProvider.notifier).log(ActivityEvent.make(
+      module: ActivityModule.quote,
+      verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
+      label:  'COT #${q.sequence}-${q.year}',
+      detail: q.customerName ?? q.status.label,
+    )).ignore();
     _ensureCompany();
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
@@ -231,6 +239,15 @@ class QuotesController extends AsyncNotifier<QuotesState> {
   }
 
   Future<void> delete(String id) async {
+    final q = state.value?.quotes.where((e) => e.id == id).firstOrNull;
+    if (q != null) {
+      ref.read(activityProvider.notifier).log(ActivityEvent.make(
+        module: ActivityModule.quote,
+        verb:   ActivityVerb.deleted,
+        label:  'COT #${q.sequence}-${q.year}',
+        detail: q.customerName ?? 'eliminada',
+      )).ignore();
+    }
     _ensureCompany();
     final ent = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(ent);
