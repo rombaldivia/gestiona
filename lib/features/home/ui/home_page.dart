@@ -222,8 +222,15 @@ class HomePage extends ConsumerWidget {
           const SizedBox(height: 20),
 
           // ── Actividad reciente ────────────────────────────────────────────
-          Text('Actividad reciente',
-              style: AppTextStyles.title.copyWith(fontSize: 15)),
+          Row(children: [
+            Text('Actividad reciente',
+                style: AppTextStyles.title.copyWith(fontSize: 15)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => ref.read(activityProvider.notifier).clear(),
+              child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
           const SizedBox(height: 10),
 
           if (recentActivity.isEmpty)
@@ -398,10 +405,10 @@ class _ActivityEventItem extends StatelessWidget {
     final now  = DateTime.now();
     final diff = now.difference(d);
     if (diff.inMinutes < 1)  return 'ahora';
-    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
-    if (diff.inHours < 24)   return 'hace ${diff.inHours}h';
+    if (diff.inMinutes < 60) return 'hace \${diff.inMinutes} min';
+    if (diff.inHours < 24)   return 'hace \${diff.inHours}h';
     if (diff.inDays == 1)    return 'ayer';
-    return '${d.day}/${d.month}';
+    return '\${d.day}/\${d.month}';
   }
 
   @override
@@ -413,8 +420,9 @@ class _ActivityEventItem extends StatelessWidget {
         Container(
           width: 36, height: 36,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
+            color: color.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
           child: Icon(_icon, color: color, size: 18),
         ),
@@ -423,59 +431,32 @@ class _ActivityEventItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.label,
-                          style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (event.detail.trim().isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            event.detail,
-                            style: AppTextStyles.label.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          _fmtTime(event.createdAtMs),
-                          style: AppTextStyles.label,
-                        ),
-                      ],
-                    ),
+              Row(children: [
+                Expanded(
+                  child: Text(event.label,
+                      style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(color: color.withValues(alpha: 0.3)),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      _verbLabel,
-                      style: AppTextStyles.label.copyWith(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                  child: Text(_verbLabel,
+                      style: TextStyle(
+                          color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text(event.detail,
+                  style: AppTextStyles.label.copyWith(
+                      color: color.withValues(alpha: 0.8)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(_fmtTime(event.createdAtMs), style: AppTextStyles.label),
             ],
           ),
         ),
@@ -483,4 +464,3 @@ class _ActivityEventItem extends StatelessWidget {
     );
   }
 }
-// ── Ítem de actividad ─────────────────────────────────────────────────────────
