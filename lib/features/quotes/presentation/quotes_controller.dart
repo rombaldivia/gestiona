@@ -214,18 +214,56 @@ class QuotesController extends AsyncNotifier<QuotesState> {
     );
   }
 
+
+  String _quoteChangeDetail(Quote? oldQ, Quote newQ, {required bool isNew}) {
+    if (isNew) return 'Creada';
+    if (oldQ == null) return 'Actualizada';
+
+    String norm(String? v) => (v ?? '').trim();
+
+    if (norm(oldQ.customerNit) != norm(newQ.customerNit)) {
+      return 'NIT: ${norm(newQ.customerNit).isEmpty ? '-' : norm(newQ.customerNit)}';
+    }
+    if (norm(oldQ.billToName) != norm(newQ.billToName)) {
+      return 'Facturar a: ${norm(newQ.billToName).isEmpty ? '-' : norm(newQ.billToName)}';
+    }
+    if (norm(oldQ.customerName) != norm(newQ.customerName)) {
+      return 'Cliente: ${norm(newQ.customerName).isEmpty ? '-' : norm(newQ.customerName)}';
+    }
+    if (norm(oldQ.customerPhone) != norm(newQ.customerPhone)) {
+      return 'Teléfono: ${norm(newQ.customerPhone).isEmpty ? '-' : norm(newQ.customerPhone)}';
+    }
+    if (oldQ.status != newQ.status) {
+      return 'Estado: ${newQ.status.label}';
+    }
+    if (oldQ.deliveryAtMs != newQ.deliveryAtMs) {
+      return newQ.deliveryAtMs == null
+          ? 'Entrega: -'
+          : 'Entrega: ${DateTime.fromMillisecondsSinceEpoch(newQ.deliveryAtMs!).day}/${DateTime.fromMillisecondsSinceEpoch(newQ.deliveryAtMs!).month}';
+    }
+    if ((oldQ.totalBob - newQ.totalBob).abs() > 0.009) {
+      return 'Total: Bs ${newQ.totalBob.toStringAsFixed(2)}';
+    }
+    if (norm(oldQ.title) != norm(newQ.title)) {
+      return 'Título: ${norm(newQ.title).isEmpty ? '-' : norm(newQ.title)}';
+    }
+    return 'Actualizada';
+  }
+
   Future<void> reload() async {
     ref.invalidateSelf();
     await future;
   }
 
   Future<void> upsert(Quote q) async {
-    final existing = state.value?.quotes.any((e) => e.id == q.id) ?? false;
+    final oldQ = state.value?.quotes.where((e) => e.id == q.id).firstOrNull;
+    final existing = oldQ != null;
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
       module: ActivityModule.quote,
       verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
       label:  'COT #${q.sequence}-${q.year}',
-      detail: q.customerName ?? q.status.label,
+      detail: _quoteChangeDetail(oldQ, q, isNew: !existing),
+      entityId: q.id,
     )).ignore();
     _ensureCompany();
     final ent = await _getFreshEntitlements();
@@ -245,7 +283,8 @@ class QuotesController extends AsyncNotifier<QuotesState> {
         module: ActivityModule.quote,
         verb:   ActivityVerb.deleted,
         label:  'COT #${q.sequence}-${q.year}',
-        detail: q.customerName ?? 'eliminada',
+        detail: [if ((q.customerName ?? '').trim().isNotEmpty) 'Cliente: ${q.customerName}', 'Eliminada'].join(' · '),
+        entityId: q.id,
       )).ignore();
     }
     _ensureCompany();

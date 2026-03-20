@@ -138,6 +138,44 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     await future;
   }
 
+
+  String _inventoryItemChangeDetail(
+    InventoryItem? oldItem,
+    InventoryItem newItem, {
+    required bool isNew,
+  }) {
+    if (isNew) return 'Creado';
+    if (oldItem == null) return 'Actualizado';
+
+    String norm(String? v) => (v ?? '').trim();
+
+    if (norm(oldItem.name) != norm(newItem.name)) {
+      return 'Nombre: ${newItem.name}';
+    }
+    if (norm(oldItem.sku) != norm(newItem.sku)) {
+      return 'SKU: ${norm(newItem.sku).isEmpty ? '-' : norm(newItem.sku)}';
+    }
+    if (norm(oldItem.unit) != norm(newItem.unit)) {
+      return 'Unidad: ${norm(newItem.unit).isEmpty ? '-' : norm(newItem.unit)}';
+    }
+    if ((oldItem.salePrice ?? 0) != (newItem.salePrice ?? 0)) {
+      return 'Precio venta: ${newItem.salePrice?.toStringAsFixed(2) ?? '-'}';
+    }
+    if ((oldItem.cost ?? 0) != (newItem.cost ?? 0)) {
+      return 'Costo: ${newItem.cost?.toStringAsFixed(2) ?? '-'}';
+    }
+    if (oldItem.stock != newItem.stock) {
+      return 'Stock: ${newItem.stock.toStringAsFixed(0)}';
+    }
+    if ((oldItem.minStock ?? 0) != (newItem.minStock ?? 0)) {
+      return 'Stock mínimo: ${newItem.minStock?.toStringAsFixed(0) ?? '-'}';
+    }
+    if (oldItem.kind != newItem.kind) {
+      return 'Tipo: ${newItem.kind.label}';
+    }
+    return 'Actualizado';
+  }
+
   Future<void> upsertItem({
     required InventoryItem item,
     required Entitlements ent,
@@ -145,6 +183,17 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     _ensureCompany();
     final freshEnt = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(freshEnt);
+
+    final oldItem = state.asData?.value.items.where((e) => e.id == item.id).firstOrNull;
+    final existing = oldItem != null;
+
+    ref.read(activityProvider.notifier).log(ActivityEvent.make(
+      module: ActivityModule.inventory,
+      verb: existing ? ActivityVerb.updated : ActivityVerb.created,
+      label: item.name,
+      detail: _inventoryItemChangeDetail(oldItem, item, isNew: !existing),
+      entityId: item.id,
+    )).ignore();
 
     await _service.upsertItemOfflineFirst(
       companyId: _companyId!,
@@ -162,6 +211,17 @@ class InventoryController extends AsyncNotifier<InventoryState> {
     _ensureCompany();
     final freshEnt = await _getFreshEntitlements();
     await _ensureCompanyDocIfNeeded(freshEnt);
+
+    final item = state.asData?.value.items.where((e) => e.id == itemId).firstOrNull;
+    if (item != null) {
+      ref.read(activityProvider.notifier).log(ActivityEvent.make(
+        module: ActivityModule.inventory,
+        verb: ActivityVerb.deleted,
+        label: item.name,
+        detail: 'Eliminado',
+        entityId: item.id,
+      )).ignore();
+    }
 
     await _service.deleteItemOfflineFirst(
       companyId: _companyId!,
@@ -193,12 +253,14 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       dirty: true,
     );
 
-    final sign = delta > 0 ? '+' : '';
+    final allItems = await _service.listItems(companyId: _companyId!);
+    final itemName = allItems.where((i) => i.id == itemId).firstOrNull?.name ?? itemId;
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
       module: ActivityModule.inventory,
       verb:   delta > 0 ? ActivityVerb.stockIn : ActivityVerb.stockOut,
-      label:  itemId,
-      detail: '$sign${delta.toStringAsFixed(0)} unidades',
+      label:  itemName,
+      detail: [(delta > 0 ? 'Entrada' : 'Salida'), '${delta.abs().toStringAsFixed(0)} unidades'].join(' · '),
+      entityId: itemId,
     )).ignore();
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
