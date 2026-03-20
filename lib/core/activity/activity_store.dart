@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ActivityModule { quote, workOrder, inventory }
@@ -12,6 +13,7 @@ class ActivityEvent {
     required this.label,
     required this.detail,
     required this.createdAtMs,
+    this.entityId,
   });
 
   final String id;
@@ -20,6 +22,7 @@ class ActivityEvent {
   final String label;
   final String detail;
   final int createdAtMs;
+  final String? entityId;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -28,79 +31,68 @@ class ActivityEvent {
         'label': label,
         'detail': detail,
         'createdAtMs': createdAtMs,
+        'entityId': entityId,
       };
 
   factory ActivityEvent.fromJson(Map<String, dynamic> m) => ActivityEvent(
         id: m['id'] as String,
         module: ActivityModule.values.byName(m['module'] as String),
         verb: ActivityVerb.values.byName(m['verb'] as String),
-        label: _sanitizeText(m['label'] as String),
-        detail: _sanitizeText(m['detail'] as String),
+        label: m['label'] as String,
+        detail: m['detail'] as String,
         createdAtMs: m['createdAtMs'] as int,
+        entityId: m['entityId'] as String?,
       );
-
-  static String _sanitizeText(String value) {
-    return value
-        .replaceAll(r'\${q.sequence}', '')
-        .replaceAll(r'\${q.year}', '')
-        .replaceAll(r'\${wo.sequence}', '')
-        .replaceAll(r'\${wo.year}', '')
-        .replaceAll('COT #-', 'COT #')
-        .replaceAll('OT #-', 'OT #')
-        .trim();
-  }
 
   static ActivityEvent make({
     required ActivityModule module,
     required ActivityVerb verb,
     required String label,
     required String detail,
+    String? entityId,
   }) =>
       ActivityEvent(
         id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
         module: module,
         verb: verb,
-        label: _sanitizeText(label),
-        detail: _sanitizeText(detail),
+        label: label,
+        detail: detail,
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        entityId: entityId,
       );
 }
 
 class ActivityStore {
   static const _key = 'gestiona_activity_v1';
-  static const _maxLen = 50;
+  static const _max = 30;
 
   Future<List<ActivityEvent>> loadAll() async {
-    final sp = await SharedPreferences.getInstance();
-    final raw = sp.getString(_key);
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
-      final list = (jsonDecode(raw) as List)
-          .cast<Map<String, dynamic>>()
-          .map(ActivityEvent.fromJson)
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => ActivityEvent.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
-
-      await sp.setString(
-        _key,
-        jsonEncode(list.map((e) => e.toJson()).toList()),
-      );
-
-      return list;
     } catch (_) {
       return [];
     }
   }
 
   Future<void> add(ActivityEvent event) async {
-    final all = await loadAll();
-    final next = [event, ...all].take(_maxLen).toList();
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString(_key, jsonEncode(next.map((e) => e.toJson()).toList()));
+    final prefs = await SharedPreferences.getInstance();
+    final current = await loadAll();
+    final next = [event, ...current].take(_max).toList();
+    await prefs.setString(
+      _key,
+      jsonEncode(next.map((e) => e.toJson()).toList()),
+    );
   }
 
   Future<void> clear() async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.remove(_key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
   }
 }
