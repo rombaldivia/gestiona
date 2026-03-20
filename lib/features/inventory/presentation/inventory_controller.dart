@@ -193,14 +193,14 @@ class InventoryController extends AsyncNotifier<InventoryState> {
       dirty: true,
     );
 
-    final sign = delta > 0 ? '+' : '';
     final allItems  = await _service.listItems(companyId: _companyId!);
     final itemName  = allItems.where((i) => i.id == itemId).firstOrNull?.name ?? itemId;
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
       module: ActivityModule.inventory,
       verb:   delta > 0 ? ActivityVerb.stockIn : ActivityVerb.stockOut,
       label:  itemName,
-      detail: '$sign${delta.toStringAsFixed(0)} unidades',
+      detail: [(delta > 0 ? 'Entrada' : 'Salida'), '${delta.abs().toStringAsFixed(0)} unidades'].join(' · '),
+      entityId: itemId,
     )).ignore();
     await _service.adjustStockOfflineFirst(
       companyId: _companyId!,
