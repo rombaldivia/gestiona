@@ -2,22 +2,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/activity/activity_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
-import '../../subscription/presentation/entitlements_scope.dart';
+import '../../gemini/ui/gemini_chat_page.dart';
+import '../../inventory/presentation/inventory_providers.dart';
+import '../../inventory/ui/inventory_item_form_page.dart';
 import '../../inventory/ui/inventory_page.dart';
 import '../../quotes/domain/quote_status.dart';
 import '../../quotes/presentation/quotes_controller.dart';
+import '../../quotes/ui/quote_editor_page.dart';
 import '../../quotes/ui/quotes_tabs_page.dart';
+import '../../subscription/presentation/entitlements_scope.dart';
 import '../../work_orders/presentation/work_orders_controller.dart';
-import '../../work_orders/ui/work_orders_page.dart';
-import '../../gemini/ui/gemini_chat_page.dart';
-import '../../quotes/ui/quote_details_page.dart';
 import '../../work_orders/ui/work_order_editor_page.dart';
-import '../../inventory/ui/inventory_item_form_page.dart';
-import '../../inventory/presentation/inventory_providers.dart';
-import '../../../core/activity/activity_provider.dart';
+import '../../work_orders/ui/work_orders_page.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({
@@ -49,35 +49,67 @@ class HomePage extends ConsumerWidget {
     required List<dynamic> items,
     required bool proCloud,
   }) {
+    final entityId = (event.entityId ?? '').trim();
+    if (entityId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este evento es antiguo y no tiene acceso directo.'),
+        ),
+      );
+      return;
+    }
+
     switch (event.module) {
       case ActivityModule.quote:
-        final q = quotes.where((e) => e.id == event.entityId).firstOrNull;
+        dynamic q;
+        for (final e in quotes) {
+          if (e.id == entityId) {
+            q = e;
+            break;
+          }
+        }
         if (q != null) {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => QuoteDetailsPage(quote: q)),
+            MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: q)),
           );
           return;
         }
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const QuotesTabsPage()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró la cotización exacta.'),
+          ),
         );
         return;
 
       case ActivityModule.workOrder:
-        final wo = orders.where((e) => e.id == event.entityId).firstOrNull;
+        dynamic wo;
+        for (final e in orders) {
+          if (e.id == entityId) {
+            wo = e;
+            break;
+          }
+        }
         if (wo != null) {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)),
           );
           return;
         }
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const WorkOrdersPage()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró la orden de trabajo exacta.'),
+          ),
         );
         return;
 
       case ActivityModule.inventory:
-        final item = items.where((e) => e.id == event.entityId).firstOrNull;
+        dynamic item;
+        for (final e in items) {
+          if (e.id == entityId) {
+            item = e;
+            break;
+          }
+        }
         if (item != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -89,8 +121,10 @@ class HomePage extends ConsumerWidget {
           );
           return;
         }
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const InventoryPage()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró el artículo exacto de inventario.'),
+          ),
         );
         return;
     }
@@ -100,12 +134,11 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ent     = EntitlementsScope.of(context);
     final company = CompanyScope.of(context);
-    final quotes  = ref.watch(quotesControllerProvider).value?.quotes ?? [];
-    final orders  = ref.watch(workOrdersControllerProvider).value?.orders ?? [];
-    final items   = ref.watch(inventoryItemsProvider);
 
     // Datos reales
-    
+    final quotes = ref.watch(quotesControllerProvider).value?.quotes ?? [];
+    final orders = ref.watch(workOrdersControllerProvider).value?.orders ?? [];
+    final items  = ref.watch(inventoryItemsProvider);
 
     final events = ref.watch(activityProvider).value ?? [];
 
@@ -189,7 +222,7 @@ class HomePage extends ConsumerWidget {
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(color: AppColors.border),
             ),
-            child: Row(children: [
+              child: Row(children: [
               Container(
                 width: 8, height: 8,
                 decoration: BoxDecoration(
@@ -283,15 +316,8 @@ class HomePage extends ConsumerWidget {
           const SizedBox(height: 20),
 
           // ── Actividad reciente ────────────────────────────────────────────
-          Row(children: [
-            Text('Actividad reciente',
-                style: AppTextStyles.title.copyWith(fontSize: 15)),
-            const Spacer(),
-            TextButton(
-              onPressed: () => ref.read(activityProvider.notifier).clear(),
-              child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
-            ),
-          ]),
+          Text('Actividad reciente',
+              style: AppTextStyles.title.copyWith(fontSize: 15)),
           const SizedBox(height: 10),
 
           if (recentActivity.isEmpty)
@@ -423,7 +449,7 @@ class _ModuleCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
+        ),
     );
   }
 }
@@ -441,11 +467,14 @@ class _ActivityEventItem extends StatelessWidget {
   final bool isLast;
   final VoidCallback? onTap;
 
-  Color get _color {
+  Color get _moduleColor {
     switch (event.module) {
-      case ActivityModule.quote:     return AppColors.quotes;
-      case ActivityModule.workOrder: return AppColors.workOrders;
-      case ActivityModule.inventory: return AppColors.inventory;
+      case ActivityModule.quote:
+        return AppColors.quotes;
+      case ActivityModule.workOrder:
+        return AppColors.workOrders;
+      case ActivityModule.inventory:
+        return AppColors.inventory;
     }
   }
 
@@ -457,88 +486,159 @@ class _ActivityEventItem extends StatelessWidget {
         return Icons.engineering_outlined;
       case ActivityModule.inventory:
         switch (event.verb) {
-          case ActivityVerb.stockIn:  return Icons.arrow_downward_rounded;
-          case ActivityVerb.stockOut: return Icons.arrow_upward_rounded;
-          case ActivityVerb.deleted:  return Icons.delete_outline;
-          default:                    return Icons.inventory_2_outlined;
+          case ActivityVerb.stockIn:
+            return Icons.arrow_downward_rounded;
+          case ActivityVerb.stockOut:
+            return Icons.arrow_upward_rounded;
+          case ActivityVerb.deleted:
+            return Icons.delete_outline;
+          default:
+            return Icons.inventory_2_outlined;
         }
     }
   }
 
   String get _verbLabel {
     switch (event.verb) {
-      case ActivityVerb.created:  return 'creado';
-      case ActivityVerb.updated:  return 'actualizado';
-      case ActivityVerb.deleted:  return 'eliminado';
-      case ActivityVerb.stockIn:  return 'entrada';
-      case ActivityVerb.stockOut: return 'salida';
+      case ActivityVerb.created:
+        return 'creado';
+      case ActivityVerb.updated:
+        return 'actualizado';
+      case ActivityVerb.deleted:
+        return 'eliminado';
+      case ActivityVerb.stockIn:
+        return 'entrada';
+      case ActivityVerb.stockOut:
+        return 'salida';
     }
   }
 
   String _fmtTime(int ms) {
-    final d    = DateTime.fromMillisecondsSinceEpoch(ms);
-    final now  = DateTime.now();
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    final now = DateTime.now();
     final diff = now.difference(d);
-    if (diff.inMinutes < 1)  return 'ahora';
+
+    if (diff.inMinutes < 1) return 'ahora';
     if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
-    if (diff.inHours < 24)   return 'hace ${diff.inHours}h';
-    if (diff.inDays == 1)    return 'ayer';
+    if (diff.inHours < 24) return 'hace ${diff.inHours}h';
+    if (diff.inDays == 1) return 'ayer';
     return '${d.day}/${d.month}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = _color;
+    final color = _moduleColor;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Padding(
         padding: EdgeInsets.fromLTRB(16, 12, 16, isLast ? 12 : 12),
-        child: Row(children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: color.withValues(alpha: 0.3)),
-            ),
-            child: Icon(_icon, color: color, size: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: color.withValues(alpha: 0.14)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(event.label,
-                        style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 4,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(AppRadius.md),
+                    bottomLeft: Radius.circular(AppRadius.md),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                      border: Border.all(color: color.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(_verbLabel,
-                        style: TextStyle(
-                            color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Icon(_icon, color: color, size: 19),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    event.label,
+                                    style: AppTextStyles.body.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: color,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                                  ),
+                                  child: Text(
+                                    _verbLabel,
+                                    style: AppTextStyles.label.copyWith(
+                                      color: color,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (event.detail.trim().isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                event.detail,
+                                style: AppTextStyles.label.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                            const SizedBox(height: 6),
+                            Text(
+                              _fmtTime(event.createdAtMs),
+                              style: AppTextStyles.label.copyWith(
+                                color: color.withValues(alpha: 0.75),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ]),
-                const SizedBox(height: 2),
-                Text(event.detail,
-                    style: AppTextStyles.label.copyWith(
-                        color: color.withValues(alpha: 0.8)),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(_fmtTime(event.createdAtMs), style: AppTextStyles.label),
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
-        ]),
+        ),
       ),
     );
   }
