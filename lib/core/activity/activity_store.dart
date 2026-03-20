@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ActivityModule { quote, workOrder, inventory }
@@ -64,16 +63,15 @@ class ActivityEvent {
 
 class ActivityStore {
   static const _key = 'gestiona_activity_v1';
-  static const _max = 30;
+  static const _maxLen = 50;
 
   Future<List<ActivityEvent>> loadAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getString(_key);
     if (raw == null || raw.isEmpty) return [];
 
     try {
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      return decoded
+      return (jsonDecode(raw) as List)
           .map((e) => ActivityEvent.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
     } catch (_) {
@@ -82,17 +80,14 @@ class ActivityStore {
   }
 
   Future<void> add(ActivityEvent event) async {
-    final prefs = await SharedPreferences.getInstance();
-    final current = await loadAll();
-    final next = [event, ...current].take(_max).toList();
-    await prefs.setString(
-      _key,
-      jsonEncode(next.map((e) => e.toJson()).toList()),
-    );
+    final all = await loadAll();
+    final next = [event, ...all].take(_maxLen).toList();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_key, jsonEncode(next.map((e) => e.toJson()).toList()));
   }
 
   Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove(_key);
   }
 }

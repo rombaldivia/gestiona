@@ -60,15 +60,50 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
     return WorkOrdersState(orders: orders);
   }
 
+
+  String _workOrderChangeDetail(
+    WorkOrder? oldWo,
+    WorkOrder newWo, {
+    required bool isNew,
+  }) {
+    if (isNew) return 'Creada';
+    if (oldWo == null) return 'Actualizada';
+
+    String norm(String? v) => (v ?? '').trim();
+
+    if (norm(oldWo.customerName) != norm(newWo.customerName)) {
+      return 'Cliente: ${norm(newWo.customerName).isEmpty ? '-' : norm(newWo.customerName)}';
+    }
+    if (norm(oldWo.customerPhone) != norm(newWo.customerPhone)) {
+      return 'Teléfono: ${norm(newWo.customerPhone).isEmpty ? '-' : norm(newWo.customerPhone)}';
+    }
+    if (oldWo.status != newWo.status) {
+      return 'Estado: ${newWo.status.label}';
+    }
+    if (oldWo.deliveryAtMs != newWo.deliveryAtMs) {
+      return newWo.deliveryAtMs == null
+          ? 'Entrega: -'
+          : 'Entrega: ${DateTime.fromMillisecondsSinceEpoch(newWo.deliveryAtMs!).day}/${DateTime.fromMillisecondsSinceEpoch(newWo.deliveryAtMs!).month}';
+    }
+    if (norm(oldWo.notes) != norm(newWo.notes)) {
+      return 'Notas actualizadas';
+    }
+    if (norm(oldWo.quoteTitle) != norm(newWo.quoteTitle)) {
+      return 'Trabajo: ${norm(newWo.quoteTitle).isEmpty ? '-' : norm(newWo.quoteTitle)}';
+    }
+    return 'Actualizada';
+  }
+
   // ── CRUD ──────────────────────────────────────────────────────────────────
 
   Future<void> upsert(WorkOrder wo) async {
-    final existing = state.value?.orders.any((e) => e.id == wo.id) ?? false;
+    final oldWo = state.value?.orders.where((e) => e.id == wo.id).firstOrNull;
+    final existing = oldWo != null;
     ref.read(activityProvider.notifier).log(ActivityEvent.make(
       module: ActivityModule.workOrder,
       verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
       label:  'OT #${wo.sequence}-${wo.year}',
-      detail: [if ((wo.customerName ?? '').trim().isNotEmpty) 'Cliente: ${wo.customerName}', 'Estado: ${wo.status.label}'].join(' · '),
+      detail: _workOrderChangeDetail(oldWo, wo, isNew: !existing),
       entityId: wo.id,
     )).ignore();
     final cid = _companyId;
