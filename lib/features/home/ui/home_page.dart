@@ -13,6 +13,10 @@ import '../../quotes/ui/quotes_tabs_page.dart';
 import '../../work_orders/presentation/work_orders_controller.dart';
 import '../../work_orders/ui/work_orders_page.dart';
 import '../../gemini/ui/gemini_chat_page.dart';
+import '../../quotes/ui/quote_details_page.dart';
+import '../../work_orders/ui/work_order_editor_page.dart';
+import '../../inventory/ui/inventory_item_form_page.dart';
+import '../../inventory/presentation/inventory_providers.dart';
 import '../../../core/activity/activity_provider.dart';
 
 class HomePage extends ConsumerWidget {
@@ -37,14 +41,71 @@ class HomePage extends ConsumerWidget {
     );
   }
 
+  void _openActivityTarget(
+    BuildContext context,
+    ActivityEvent event, {
+    required List<dynamic> quotes,
+    required List<dynamic> orders,
+    required List<dynamic> items,
+    required bool proCloud,
+  }) {
+    switch (event.module) {
+      case ActivityModule.quote:
+        final q = quotes.where((e) => e.id == event.entityId).firstOrNull;
+        if (q != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => QuoteDetailsPage(quote: q)),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const QuotesTabsPage()),
+        );
+        return;
+
+      case ActivityModule.workOrder:
+        final wo = orders.where((e) => e.id == event.entityId).firstOrNull;
+        if (wo != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const WorkOrdersPage()),
+        );
+        return;
+
+      case ActivityModule.inventory:
+        final item = items.where((e) => e.id == event.entityId).firstOrNull;
+        if (item != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => InventoryItemFormPage(
+                initial: item,
+                proCloud: proCloud,
+              ),
+            ),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const InventoryPage()),
+        );
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ent     = EntitlementsScope.of(context);
     final company = CompanyScope.of(context);
+    final quotes  = ref.watch(quotesControllerProvider).value?.quotes ?? [];
+    final orders  = ref.watch(workOrdersControllerProvider).value?.orders ?? [];
+    final items   = ref.watch(inventoryItemsProvider);
 
     // Datos reales
-    final quotes = ref.watch(quotesControllerProvider).value?.quotes ?? [];
-    final orders = ref.watch(workOrdersControllerProvider).value?.orders ?? [];
+    
 
     final events = ref.watch(activityProvider).value ?? [];
 
@@ -222,8 +283,15 @@ class HomePage extends ConsumerWidget {
           const SizedBox(height: 20),
 
           // ── Actividad reciente ────────────────────────────────────────────
-          Text('Actividad reciente',
-              style: AppTextStyles.title.copyWith(fontSize: 15)),
+          Row(children: [
+            Text('Actividad reciente',
+                style: AppTextStyles.title.copyWith(fontSize: 15)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => ref.read(activityProvider.notifier).clear(),
+              child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
           const SizedBox(height: 10),
 
           if (recentActivity.isEmpty)
@@ -251,8 +319,16 @@ class HomePage extends ConsumerWidget {
                   for (int i = 0; i < recentActivity.length; i++) ...[
                     if (i > 0) const Divider(height: 1),
                     _ActivityEventItem(
-                      event:  recentActivity[i],
+                      event: recentActivity[i],
                       isLast: i == recentActivity.length - 1,
+                      onTap: () => _openActivityTarget(
+                        context,
+                        recentActivity[i],
+                        quotes: quotes,
+                        orders: orders,
+                        items: items,
+                        proCloud: ent.cloudSync,
+                      ),
                     ),
                   ],
                 ],
@@ -355,9 +431,15 @@ class _ModuleCard extends StatelessWidget {
 
 // ── Ítem de evento real ───────────────────────────────────────────────────────
 class _ActivityEventItem extends StatelessWidget {
-  const _ActivityEventItem({required this.event, this.isLast = false});
+  const _ActivityEventItem({
+    required this.event,
+    this.isLast = false,
+    this.onTap,
+  });
+
   final ActivityEvent event;
   final bool isLast;
+  final VoidCallback? onTap;
 
   Color get _color {
     switch (event.module) {
@@ -407,80 +489,57 @@ class _ActivityEventItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _color;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, isLast ? 12 : 12),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, isLast ? 12 : 12),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Icon(_icon, color: color, size: 18),
           ),
-          child: Icon(_icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.label,
-                          style: AppTextStyles.body.copyWith(
+                    child: Text(event.label,
+                        style: AppTextStyles.body.copyWith(
                             fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (event.detail.trim().isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            event.detail,
-                            style: AppTextStyles.label.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          _fmtTime(event.createdAtMs),
-                          style: AppTextStyles.label,
-                        ),
-                      ],
-                    ),
+                            color: AppColors.textPrimary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
-                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
+                      color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
                     ),
-                    child: Text(
-                      _verbLabel,
-                      style: AppTextStyles.label.copyWith(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text(_verbLabel,
+                        style: TextStyle(
+                            color: color, fontSize: 10, fontWeight: FontWeight.w700)),
                   ),
-                ],
-              ),
-            ],
+                ]),
+                const SizedBox(height: 2),
+                Text(event.detail,
+                    style: AppTextStyles.label.copyWith(
+                        color: color.withValues(alpha: 0.8)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(_fmtTime(event.createdAtMs), style: AppTextStyles.label),
+              ],
+            ),
           ),
-        ),
-      ]),
+        ]),
+      ),
     );
   }
 }
-// ── Ítem de actividad ─────────────────────────────────────────────────────────

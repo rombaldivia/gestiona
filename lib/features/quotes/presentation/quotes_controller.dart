@@ -225,7 +225,8 @@ class QuotesController extends AsyncNotifier<QuotesState> {
       module: ActivityModule.quote,
       verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
       label:  'COT #${q.sequence}-${q.year}',
-      detail: q.customerName ?? q.status.label,
+      detail: [if ((q.customerName ?? '').trim().isNotEmpty) 'Cliente: ${q.customerName}', 'Estado: ${q.status.label}'].join(' · '),
+      entityId: q.id,
     )).ignore();
     _ensureCompany();
     final ent = await _getFreshEntitlements();
@@ -245,7 +246,8 @@ class QuotesController extends AsyncNotifier<QuotesState> {
         module: ActivityModule.quote,
         verb:   ActivityVerb.deleted,
         label:  'COT #${q.sequence}-${q.year}',
-        detail: q.customerName ?? 'eliminada',
+        detail: [if ((q.customerName ?? '').trim().isNotEmpty) 'Cliente: ${q.customerName}', 'Eliminada'].join(' · '),
+        entityId: q.id,
       )).ignore();
     }
     _ensureCompany();

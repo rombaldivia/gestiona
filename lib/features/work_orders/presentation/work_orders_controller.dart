@@ -68,7 +68,8 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
       module: ActivityModule.workOrder,
       verb:   existing ? ActivityVerb.updated : ActivityVerb.created,
       label:  'OT #${wo.sequence}-${wo.year}',
-      detail: wo.customerName ?? wo.status.label,
+      detail: [if ((wo.customerName ?? '').trim().isNotEmpty) 'Cliente: ${wo.customerName}', 'Estado: ${wo.status.label}'].join(' · '),
+      entityId: wo.id,
     )).ignore();
     final cid = _companyId;
     if (cid == null) return;
@@ -91,7 +92,8 @@ class WorkOrdersController extends AsyncNotifier<WorkOrdersState> {
         module: ActivityModule.workOrder,
         verb:   ActivityVerb.deleted,
         label:  'OT #${wo.sequence}-${wo.year}',
-        detail: wo.customerName ?? 'eliminada',
+        detail: [if ((wo.customerName ?? '').trim().isNotEmpty) 'Cliente: ${wo.customerName}', 'Eliminada'].join(' · '),
+        entityId: wo.id,
       )).ignore();
     }
     final cid = _companyId;
