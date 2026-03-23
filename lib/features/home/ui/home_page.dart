@@ -18,6 +18,9 @@ import '../../subscription/presentation/entitlements_scope.dart';
 import '../../work_orders/presentation/work_orders_controller.dart';
 import '../../work_orders/ui/work_order_editor_page.dart';
 import '../../work_orders/ui/work_orders_page.dart';
+import '../../sales/ui/sales_page.dart';
+import '../../sales/ui/sale_editor_page.dart';
+import '../../sales/presentation/sales_controller.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({
@@ -259,6 +262,23 @@ class HomePage extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
+          _FeaturedSalesCard(
+            onNewSale: () async {
+              final draft = await ref.read(salesControllerProvider.notifier).newDraft();
+              if (!context.mounted) return;
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SaleEditorPage(sale: draft)),
+              );
+            },
+            onViewSales: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SalesPage()),
+              );
+            },
+          ),
+
+          const SizedBox(height: 18),
+
           // ── Grid de módulos ───────────────────────────────────────────────
           Row(children: [
             Expanded(
@@ -390,6 +410,193 @@ class _SummaryChip extends StatelessWidget {
       child: Text(label,
           style: AppTextStyles.label.copyWith(
               color: color, fontWeight: FontWeight.w600, fontSize: 11)),
+    );
+  }
+}
+
+// ── Card destacada de ventas ──────────────────────────────────────────────────
+class _FeaturedSalesCard extends StatelessWidget {
+  const _FeaturedSalesCard({
+    required this.onNewSale,
+    required this.onViewSales,
+  });
+
+  final VoidCallback onNewSale;
+  final VoidCallback onViewSales;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary,
+            AppColors.primaryLight,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: AppShadows.elevated,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: const Icon(
+                  Icons.point_of_sale_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ventas',
+                      style: AppTextStyles.title.copyWith(
+                        color: Colors.white,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Registra una venta directa en segundos',
+                      style: AppTextStyles.label.copyWith(
+                        color: Colors.white.withValues(alpha: 0.88),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Text(
+                  'Gratis',
+                  style: AppTextStyles.label.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Ideal para mostrador, ventas rápidas y registro inmediato de productos o servicios.',
+            style: AppTextStyles.body.copyWith(
+              color: Colors.white.withValues(alpha: 0.90),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [
+              _SalesFeatureChip(
+                icon: Icons.inventory_2_outlined,
+                label: 'Actualiza stock',
+              ),
+              _SalesFeatureChip(
+                icon: Icons.person_outline,
+                label: 'Cliente opcional',
+              ),
+              _SalesFeatureChip(
+                icon: Icons.flash_on_outlined,
+                label: 'Flujo rápido',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onNewSale,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart_rounded),
+                  label: const Text('Nueva venta'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onViewSales,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.40),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Ver ventas'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesFeatureChip extends StatelessWidget {
+  const _SalesFeatureChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: Colors.white),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: AppTextStyles.label.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
