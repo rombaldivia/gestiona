@@ -6,6 +6,8 @@ import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/utils/e164_phone_utils.dart';
+
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../inventory/presentation/inventory_by_id_provider.dart';
 
@@ -51,6 +53,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   final List<QuoteLine> _lines = [];
   List<QuoteLine>? _undoLinesSnapshot;
   String _phoneE164 = '';
+  late final String _phoneInitialCountryCode;
+  late final String _phoneInitialNationalNumber;
   int?   _deliveryAtMs;
 
   @override
@@ -63,6 +67,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     _billToCtrl   = TextEditingController(text: widget.quote.billToName ?? '');
     _status       = widget.quote.status;
     _lines.addAll(widget.quote.lines);
+    final parsedPhone = parsePhoneForField(widget.quote.customerPhone);
+    _phoneInitialCountryCode = parsedPhone.iso2Code;
+    _phoneInitialNationalNumber = parsedPhone.nationalNumber;
     _phoneE164    = widget.quote.customerPhone ?? '';
     _deliveryAtMs = widget.quote.deliveryAtMs;
   }
@@ -387,7 +394,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
               ),
               const SizedBox(height: 12),
               IntlPhoneField(
-                initialValue: _phoneE164,
+                initialCountryCode: _phoneInitialCountryCode,
+                initialValue: _phoneInitialNationalNumber,
                 decoration: const InputDecoration(labelText: 'Teléfono'),
                 onChanged: (p) => _phoneE164 = p.completeNumber,
               ),
