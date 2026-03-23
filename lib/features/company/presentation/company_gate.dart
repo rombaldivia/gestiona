@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_service.dart';
-import '../../home/ui/home_page.dart';
+import '../../home/ui/home_shell_page.dart';
 import '../../subscription/presentation/entitlements_scope.dart';
 import 'company_providers.dart';
 import 'company_scope.dart';
@@ -89,7 +89,7 @@ class CompanyGate extends ConsumerWidget {
         return CompanyScope(
           companyId: company.companyId!,
           companyName: company.companyName!,
-          child: HomePage(
+          child: HomeShellPage(
             auth: auth,
             user: user,
             onSyncPressed: () => ctrl.syncNow(ent: ent),
