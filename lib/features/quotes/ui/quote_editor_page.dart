@@ -10,6 +10,8 @@ import '../../../core/utils/e164_phone_utils.dart';
 
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../inventory/presentation/inventory_by_id_provider.dart';
+import '../../sales/presentation/sales_controller.dart';
+import '../../sales/ui/sale_editor_page.dart';
 
 import '../../subscription/domain/entitlements.dart';
 import '../../subscription/domain/plan_tier.dart';
@@ -55,22 +57,24 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
   String _phoneE164 = '';
   late final String _phoneInitialCountryCode;
   late final String _phoneInitialNationalNumber;
-  int?   _deliveryAtMs;
+  int? _deliveryAtMs;
 
   @override
   void initState() {
     super.initState();
-    _titleCtrl    = TextEditingController(text: widget.quote.title ?? '');
-    _customerCtrl = TextEditingController(text: widget.quote.customerName ?? '');
-    _notesCtrl    = TextEditingController(text: widget.quote.notes ?? '');
-    _nitCtrl      = TextEditingController(text: widget.quote.customerNit ?? '');
-    _billToCtrl   = TextEditingController(text: widget.quote.billToName ?? '');
-    _status       = widget.quote.status;
+    _titleCtrl = TextEditingController(text: widget.quote.title ?? '');
+    _customerCtrl = TextEditingController(
+      text: widget.quote.customerName ?? '',
+    );
+    _notesCtrl = TextEditingController(text: widget.quote.notes ?? '');
+    _nitCtrl = TextEditingController(text: widget.quote.customerNit ?? '');
+    _billToCtrl = TextEditingController(text: widget.quote.billToName ?? '');
+    _status = widget.quote.status;
     _lines.addAll(widget.quote.lines);
     final parsedPhone = parsePhoneForField(widget.quote.customerPhone);
     _phoneInitialCountryCode = parsedPhone.iso2Code;
     _phoneInitialNationalNumber = parsedPhone.nationalNumber;
-    _phoneE164    = widget.quote.customerPhone ?? '';
+    _phoneE164 = widget.quote.customerPhone ?? '';
     _deliveryAtMs = widget.quote.deliveryAtMs;
   }
 
@@ -92,12 +96,14 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     final snap = _undoLinesSnapshot;
     if (snap == null) return;
     setState(() {
-      _lines..clear()..addAll(snap);
+      _lines
+        ..clear()
+        ..addAll(snap);
       _undoLinesSnapshot = null;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Recotización revertida')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Recotización revertida')));
   }
 
   String _fmt(double v) => v.toStringAsFixed(2);
@@ -108,7 +114,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     b.writeln('Cliente: ${_customerCtrl.text.trim()}');
     b.writeln();
     for (final l in _lines) {
-      b.writeln('• ${l.nameSnapshot}  x${l.qty.toStringAsFixed(0)}  = Bs ${l.lineTotalBob.toStringAsFixed(2)}');
+      b.writeln(
+        '• ${l.nameSnapshot}  x${l.qty.toStringAsFixed(0)}  = Bs ${l.lineTotalBob.toStringAsFixed(2)}',
+      );
     }
     b.writeln();
     b.writeln('Total: Bs ${totalBob.toStringAsFixed(2)}');
@@ -143,9 +151,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
       setState(() => _status = QuoteStatus.sent);
       final ctrl = ref.read(quotesControllerProvider.notifier);
       final q = widget.quote.copyWith(
-        status:       QuoteStatus.sent,
+        status: QuoteStatus.sent,
         customerName: _customerCtrl.text.trim(),
-        lines:        _lines,
+        lines: _lines,
       );
       await ctrl.upsert(q);
     }
@@ -156,78 +164,118 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     if (phone.isEmpty || _lines.isEmpty) return;
     if (mounted) await _askMarkAsSent();
     final digits = phone.replaceAll('+', '');
-    final text   = _buildWhatsappText(total);
-    final uri    = Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(text)}');
+    final text = _buildWhatsappText(total);
+    final uri = Uri.parse(
+      'https://wa.me/$digits?text=${Uri.encodeComponent(text)}',
+    );
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Quote _currentQuoteDraft() {
+    return widget.quote.copyWith(
+      title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+      deliveryAtMs: _deliveryAtMs,
+      customerName: _customerCtrl.text.trim().isEmpty
+          ? null
+          : _customerCtrl.text.trim(),
+      customerPhone: _phoneE164.trim().isEmpty ? null : _phoneE164.trim(),
+      customerNit: _nitCtrl.text.trim().isEmpty ? null : _nitCtrl.text.trim(),
+      billToName: _billToCtrl.text.trim().isEmpty
+          ? null
+          : _billToCtrl.text.trim(),
+      notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      status: _status,
+      lines: List<QuoteLine>.from(_lines),
+    );
   }
 
   Future<void> _createWorkOrder() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final q = widget.quote.copyWith(
-      title:         _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
-      deliveryAtMs:  _deliveryAtMs,
-      customerName:  _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
+      title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+      deliveryAtMs: _deliveryAtMs,
+      customerName: _customerCtrl.text.trim().isEmpty
+          ? null
+          : _customerCtrl.text.trim(),
       customerPhone: _phoneE164.isEmpty ? null : _phoneE164,
-      customerNit:   _nitCtrl.text.trim().isEmpty ? null : _nitCtrl.text.trim(),
-      billToName:    _billToCtrl.text.trim().isEmpty ? null : _billToCtrl.text.trim(),
-      lines:         _lines,
-      status:        _status,
+      customerNit: _nitCtrl.text.trim().isEmpty ? null : _nitCtrl.text.trim(),
+      billToName: _billToCtrl.text.trim().isEmpty
+          ? null
+          : _billToCtrl.text.trim(),
+      lines: _lines,
+      status: _status,
     );
 
     final steps = _lines.asMap().entries.map((e) {
-      final idx  = e.key;
+      final idx = e.key;
       final line = e.value;
       final qtyStr = line.qty == line.qty.roundToDouble()
           ? line.qty.toInt().toString()
           : line.qty.toStringAsFixed(2);
       return WorkOrderStep(
-        id:    '${now}_$idx',
+        id: '${now}_$idx',
         title: line.nameSnapshot,
-        qty:   line.qty,
-        unit:  line.unitSnapshot ?? 'und',
+        qty: line.qty,
+        unit: line.unitSnapshot ?? 'und',
         notes: 'Cantidad: $qtyStr ${line.unitSnapshot ?? 'und'}',
       );
     }).toList();
 
-    final woCtrl    = ref.read(workOrdersControllerProvider.notifier);
-    final allOrders = ref.read(workOrdersControllerProvider).value?.orders ?? [];
-    final existing  = allOrders.where((o) => o.quoteId == q.id).firstOrNull;
+    final woCtrl = ref.read(workOrdersControllerProvider.notifier);
+    final allOrders =
+        ref.read(workOrdersControllerProvider).value?.orders ?? [];
+    final existing = allOrders.where((o) => o.quoteId == q.id).firstOrNull;
 
     final WorkOrder wo;
     if (existing != null) {
       wo = existing.copyWith(
-        quoteTitle:    q.title,
-        deliveryAtMs:  q.deliveryAtMs,
-        customerName:  q.customerName,
+        quoteTitle: q.title,
+        deliveryAtMs: q.deliveryAtMs,
+        customerName: q.customerName,
         customerPhone: q.customerPhone,
-        steps:         steps,
-        updatedAtMs:   DateTime.now().millisecondsSinceEpoch,
+        steps: steps,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
     } else {
       final template = woCtrl.newOrder(
-        quoteId:       q.id,
+        quoteId: q.id,
         quoteSequence: q.sequence,
-        customerName:  q.customerName,
+        customerName: q.customerName,
         customerPhone: q.customerPhone,
       );
       wo = template.copyWith(
-        quoteTitle:   q.title,
+        quoteTitle: q.title,
         deliveryAtMs: q.deliveryAtMs,
-        steps:        steps,
+        steps: steps,
       );
     }
 
     if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: wo)));
+  }
+
+  Future<void> _completeToSale() async {
+    final quote = _currentQuoteDraft();
+    final sale = await ref
+        .read(salesControllerProvider.notifier)
+        .createFromQuote(quote);
+
+    if (!mounted) return;
+
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SaleEditorPage(sale: sale)));
   }
 
   Future<void> _sharePdf() async {
     if (_lines.isEmpty) return;
     final q = widget.quote.copyWith(lines: _lines);
     final Uint8List bytes = await QuotePdf.build(
-      quote: q, lines: q.lines, totalBob: q.totalBob,
+      quote: q,
+      lines: q.lines,
+      totalBob: q.totalBob,
     );
     if (mounted) await _askMarkAsSent();
     await Printing.sharePdf(
@@ -242,15 +290,17 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
     setState(() => _saving = true);
     try {
       final q = widget.quote.copyWith(
-        title:         _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
-        deliveryAtMs:  _deliveryAtMs,
-        customerName:  _customerCtrl.text.trim(),
+        title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+        deliveryAtMs: _deliveryAtMs,
+        customerName: _customerCtrl.text.trim(),
         customerPhone: _phoneE164.trim(),
-        customerNit:   _nitCtrl.text.trim().isEmpty ? null : _nitCtrl.text.trim(),
-        billToName:    _billToCtrl.text.trim().isEmpty ? null : _billToCtrl.text.trim(),
-        notes:         _notesCtrl.text.trim(),
-        status:        _status,
-        lines:         _lines,
+        customerNit: _nitCtrl.text.trim().isEmpty ? null : _nitCtrl.text.trim(),
+        billToName: _billToCtrl.text.trim().isEmpty
+            ? null
+            : _billToCtrl.text.trim(),
+        notes: _notesCtrl.text.trim(),
+        status: _status,
+        lines: _lines,
       );
       await ref.read(quotesControllerProvider.notifier).upsert(q);
       _undoLinesSnapshot = null;
@@ -277,21 +327,24 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
       builder: (_) => const PickProcessTemplateDialog(),
     );
     if (template == null) return;
-    final invById  = ref.read(inventoryByIdProvider);
+    final invById = ref.read(inventoryByIdProvider);
     final newLines = processTemplateToQuoteLines(
-      template: template, inventoryById: invById,
+      template: template,
+      inventoryById: invById,
     );
     if (newLines.isNotEmpty) setState(() => _lines.addAll(newLines));
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme   = Theme.of(context).colorScheme;
-    final total    = widget.quote.copyWith(lines: _lines).totalBob;
+    final scheme = Theme.of(context).colorScheme;
+    final total = widget.quote.copyWith(lines: _lines).totalBob;
     final hasPhone = _phoneE164.trim().isNotEmpty;
     final hasLines = _lines.isNotEmpty;
-    final ent      = EntitlementsScope.maybeOf(context) ?? Entitlements.forTier(PlanTier.free);
-    final isPro    = ent.tier == PlanTier.pro;
+    final ent =
+        EntitlementsScope.maybeOf(context) ??
+        Entitlements.forTier(PlanTier.free);
+    final isPro = ent.tier == PlanTier.pro;
 
     return PopScope(
       canPop: false,
@@ -316,7 +369,11 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                   lines: _lines,
                   onApply: (newLines) {
                     _stashUndoSnapshot();
-                    setState(() => _lines..clear()..addAll(newLines));
+                    setState(
+                      () => _lines
+                        ..clear()
+                        ..addAll(newLines),
+                    );
                   },
                 );
               },
@@ -324,7 +381,9 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
             IconButton(
               tooltip: 'WhatsApp',
               icon: const Icon(Icons.chat),
-              onPressed: (!hasPhone || !hasLines) ? null : () => _sendWhatsapp(total),
+              onPressed: (!hasPhone || !hasLines)
+                  ? null
+                  : () => _sendWhatsapp(total),
             ),
             IconButton(
               tooltip: 'PDF',
@@ -337,10 +396,17 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 value: _status,
                 underline: const SizedBox.shrink(),
                 borderRadius: BorderRadius.circular(16),
-                items: QuoteStatus.values.map((s) => DropdownMenuItem(
-                  value: s,
-                  child: Text(s.label, style: const TextStyle(fontSize: 13)),
-                )).toList(),
+                items: QuoteStatus.values
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          s.label,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (s) {
                   if (s != null) setState(() => _status = s);
                 },
@@ -357,13 +423,13 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 controller: _titleCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Nombre del proyecto',
-                  hintText:  'Ej: Impresión catálogo Hermenca',
+                  hintText: 'Ej: Impresión catálogo Hermenca',
                   prefixIcon: Icon(Icons.label_outline),
                 ),
               ),
               const SizedBox(height: 12),
               _DeliveryDatePicker(
-                valueMs:   _deliveryAtMs,
+                valueMs: _deliveryAtMs,
                 onChanged: (ms) => setState(() => _deliveryAtMs = ms),
               ),
               const SizedBox(height: 12),
@@ -377,8 +443,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
               TextFormField(
                 controller: _nitCtrl,
                 decoration: const InputDecoration(
-                  labelText:  'NIT / CI',
-                  hintText:   'Ej: 1234567',
+                  labelText: 'NIT / CI',
+                  hintText: 'Ej: 1234567',
                   prefixIcon: Icon(Icons.badge_outlined),
                 ),
                 keyboardType: TextInputType.number,
@@ -387,8 +453,8 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
               TextFormField(
                 controller: _billToCtrl,
                 decoration: const InputDecoration(
-                  labelText:  'Factura a nombre de',
-                  hintText:   'Ej: Empresa Hermenca S.R.L.',
+                  labelText: 'Factura a nombre de',
+                  hintText: 'Ej: Empresa Hermenca S.R.L.',
                   prefixIcon: Icon(Icons.receipt_outlined),
                 ),
               ),
@@ -412,7 +478,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: _addItem,
-                      icon:  const Icon(Icons.add),
+                      icon: const Icon(Icons.add),
                       label: const Text('Ítem'),
                     ),
                   ),
@@ -420,13 +486,63 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                   Expanded(
                     child: FilledButton.tonalIcon(
                       onPressed: _addProcess,
-                      icon:  const Icon(Icons.playlist_add),
+                      icon: const Icon(Icons.playlist_add),
                       label: const Text('Proceso'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
+              const SizedBox(height: 12),
+              if (_status == QuoteStatus.accepted && hasLines)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.35,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Siguiente paso',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF312E81),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _createWorkOrder,
+                            icon: const Icon(Icons.engineering_outlined),
+                            label: const Text('Crear OT',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF15803D),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _completeToSale,
+                            icon: const Icon(Icons.point_of_sale_outlined),
+                            label: const Text('Completar a venta',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               if (_lines.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -461,33 +577,22 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
                 child: Row(
                   children: [
                     const Expanded(
-                      child: Text('Total',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      child: Text(
+                        'Total',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
-                    Text('Bs ${_fmt(total)}',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: scheme.primary)),
+                    Text(
+                      'Bs ${_fmt(total)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: scheme.primary,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              if (_status == QuoteStatus.accepted) ...[
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF312E81),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: _createWorkOrder,
-                    icon:  const Icon(Icons.engineering_outlined),
-                    label: const Text('Crear Orden de Trabajo',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
+
             ],
           ),
         ),
@@ -500,7 +605,7 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
 class _DeliveryDatePicker extends StatelessWidget {
   const _DeliveryDatePicker({required this.valueMs, required this.onChanged});
 
-  final int?              valueMs;
+  final int? valueMs;
   final void Function(int?) onChanged;
 
   String get _display {
@@ -512,7 +617,7 @@ class _DeliveryDatePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasDate = valueMs != null;
-    final color   = hasDate
+    final color = hasDate
         ? Theme.of(context).colorScheme.primary
         : Theme.of(context).colorScheme.onSurfaceVariant;
 
@@ -520,12 +625,12 @@ class _DeliveryDatePicker extends StatelessWidget {
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            icon:  Icon(Icons.calendar_today_outlined, size: 18, color: color),
+            icon: Icon(Icons.calendar_today_outlined, size: 18, color: color),
             label: Text(_display, style: TextStyle(color: color)),
             style: OutlinedButton.styleFrom(
               alignment: Alignment.centerLeft,
-              padding:   const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              side:      BorderSide(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              side: BorderSide(
                 color: hasDate
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.outline,
@@ -536,10 +641,10 @@ class _DeliveryDatePicker extends StatelessWidget {
                   ? DateTime.fromMillisecondsSinceEpoch(valueMs!)
                   : DateTime.now().add(const Duration(days: 7));
               final picked = await showDatePicker(
-                context:     context,
+                context: context,
                 initialDate: initial,
-                firstDate:   DateTime(2020),
-                lastDate:    DateTime(2035),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2035),
               );
               if (picked != null) onChanged(picked.millisecondsSinceEpoch);
             },
@@ -548,7 +653,7 @@ class _DeliveryDatePicker extends StatelessWidget {
         if (hasDate) ...[
           const SizedBox(width: 6),
           IconButton(
-            icon:    const Icon(Icons.close, size: 18),
+            icon: const Icon(Icons.close, size: 18),
             tooltip: 'Quitar fecha',
             onPressed: () => onChanged(null),
           ),

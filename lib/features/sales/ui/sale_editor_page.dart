@@ -5,6 +5,7 @@ import 'package:intl_phone_field/intl_phone_field.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/e164_phone_utils.dart';
+import '../../inventory/domain/inventory_item.dart';
 import '../../inventory/domain/stock_movement.dart';
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../quotes/domain/quote_line.dart';
@@ -23,6 +24,12 @@ class SaleEditorPage extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<SaleEditorPage> createState() => _SaleEditorPageState();
+}
+
+enum _SaleStockDecision {
+  cancel,
+  continueSale,
+  restock,
 }
 
 class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
@@ -76,6 +83,17 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
 
   String _fmt(double v) => v.toStringAsFixed(2);
 
+  String _buildE164Phone({
+    required String countryCode,
+    required String nationalNumber,
+  }) {
+    final cc = countryCode.trim();
+    final nn = nationalNumber.trim().replaceAll(RegExp(r'\s+'), '');
+    if (nn.isEmpty) return '';
+    if (cc.isEmpty) return nn;
+    return '$cc$nn';
+  }
+
   Future<void> _addItem() async {
     if (_inventoryLocked) {
       _showInfo(
@@ -93,7 +111,184 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
     );
 
     if (line == null) return;
+
+    final canAdd = await _handleStockWarningBeforeAdd(line);
+    if (!canAdd) return;
+
     setState(() => _lines.add(line));
+  }
+
+  Future<bool> _handleStockWarningBeforeAdd(QuoteLine line) async {
+    final itemId = line.inventoryItemId;
+    if (itemId == null || itemId.trim().isEmpty) return true;
+
+    InventoryItem? item =
+        ref.read(inventoryItemsProvider).where((x) => x.id == itemId).firstOrNull;
+
+    if (item == null || !item.tracksStock) return true;
+    if (item.stock >= line.qty) return true;
+
+    while (item!.stock < line.qty) {
+      final missingQty = line.qty - item.stock;
+      final decision = await _showStockDecisionDialog(
+        item: item,
+        missingQty: missingQty,
+        title: 'Stock insuficiente',
+        messagePrefix:
+            'El ítem "${item.name}" no tiene stock suficiente para esta venta.',
+      );
+
+      if (decision == _SaleStockDecision.cancel) {
+        return false;
+      }
+
+      if (decision == _SaleStockDecision.continueSale) {
+        return true;
+      }
+
+      final updated = await _showQuickRestockDialog(
+        item: item,
+        missingQty: missingQty,
+        noteSeed: 'Reposición rápida desde venta',
+      );
+
+      if (!updated) {
+        return false;
+      }
+
+      item = ref
+          .read(inventoryItemsProvider)
+          .where((x) => x.id == itemId)
+          .firstOrNull;
+
+      if (item == null) {
+        throw StateError('No se pudo recargar el ítem de inventario.');
+      }
+    }
+
+    return true;
+  }
+
+  Future<_SaleStockDecision> _showStockDecisionDialog({
+    required InventoryItem item,
+    required double missingQty,
+    required String title,
+    required String messagePrefix,
+  }) async {
+    final decision = await showDialog<_SaleStockDecision>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(
+          '$messagePrefix\n\n'
+          'Disponible: ${item.stock.toStringAsFixed(0)} ${item.unit ?? ''}\n'
+          'Falta: ${missingQty.toStringAsFixed(0)} ${item.unit ?? ''}\n\n'
+          '¿Qué deseas hacer?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, _SaleStockDecision.cancel),
+            child: const Text('Cancelar'),
+          ),
+          OutlinedButton(
+            onPressed: () =>
+                Navigator.pop(context, _SaleStockDecision.continueSale),
+            child: const Text('Continuar sin reponer'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, _SaleStockDecision.restock),
+            child: const Text('Actualizar stock'),
+          ),
+        ],
+      ),
+    );
+
+    return decision ?? _SaleStockDecision.cancel;
+  }
+
+  Future<bool> _showQuickRestockDialog({
+    required InventoryItem item,
+    required double missingQty,
+    required String noteSeed,
+  }) async {
+    final qtyC = TextEditingController(
+      text: missingQty > 0 ? missingQty.toStringAsFixed(0) : '',
+    );
+    final noteC = TextEditingController(text: noteSeed);
+
+    final restock = await showDialog<(double, String?)>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Actualizar stock'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              item.name,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: qtyC,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Cantidad a agregar',
+                suffixText: item.unit,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteC,
+              decoration: const InputDecoration(
+                labelText: 'Nota (opcional)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final qty = double.tryParse(
+                qtyC.text.trim().replaceAll(',', '.'),
+              );
+              if (qty == null || qty <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cantidad inválida.')),
+                );
+                return;
+              }
+              final note = noteC.text.trim();
+              Navigator.pop(context, (qty, note.isEmpty ? null : note));
+            },
+            child: const Text('Aplicar'),
+          ),
+        ],
+      ),
+    );
+
+    if (restock == null) return false;
+
+    final user = await ref.read(authStateProvider.future);
+    if (user == null) {
+      throw StateError('No hay usuario autenticado.');
+    }
+
+    final ent = await ref.read(entitlementsProvider(user.uid).future);
+
+    await ref.read(inventoryControllerProvider.notifier).adjustStock(
+          itemId: item.id,
+          delta: restock.$1,
+          type: StockMovementType.inQty,
+          note: restock.$2,
+          ent: ent,
+        );
+
+    return true;
   }
 
   void _editQty(String lineId, double qty) {
@@ -138,13 +333,15 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
     }
 
     final ent = await ref.read(entitlementsProvider(user.uid).future);
-    final inventory = ref.read(inventoryItemsProvider);
     final grouped = _groupInventoryQuantities(sale.lines);
 
     for (final entry in grouped.entries) {
       final itemId = entry.key;
       final qty = entry.value;
-      final item = inventory.where((x) => x.id == itemId).firstOrNull;
+      InventoryItem? item = ref
+          .read(inventoryItemsProvider)
+          .where((x) => x.id == itemId)
+          .firstOrNull;
 
       if (item == null) {
         throw StateError('No se encontró el ítem de inventario $itemId.');
@@ -152,19 +349,60 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
 
       if (!item.tracksStock) continue;
 
-      if (item.stock < qty) {
-        throw StateError(
-          'Stock insuficiente para "${item.name}". Disponible: ${item.stock.toStringAsFixed(0)} · Requerido: ${qty.toStringAsFixed(0)}',
+      var shouldDiscount = true;
+
+      while (item!.stock < qty) {
+        final missingQty = qty - item.stock;
+        final decision = await _showStockDecisionDialog(
+          item: item,
+          missingQty: missingQty,
+          title: 'Stock insuficiente',
+          messagePrefix:
+              'No hay stock suficiente para "${item.name}" al registrar la venta.',
         );
+
+        if (decision == _SaleStockDecision.cancel) {
+          throw StateError(
+            'Venta cancelada por stock insuficiente para "${item.name}".',
+          );
+        }
+
+        if (decision == _SaleStockDecision.continueSale) {
+          shouldDiscount = false;
+          break;
+        }
+
+        final updated = await _showQuickRestockDialog(
+          item: item,
+          missingQty: missingQty,
+          noteSeed: 'Reposición rápida desde venta ${sale.numberLabel}',
+        );
+
+        if (!updated) {
+          throw StateError(
+            'Venta cancelada por stock insuficiente para "${item.name}".',
+          );
+        }
+
+        item = ref
+            .read(inventoryItemsProvider)
+            .where((x) => x.id == itemId)
+            .firstOrNull;
+
+        if (item == null) {
+          throw StateError('No se pudo recargar el ítem de inventario.');
+        }
       }
 
-      await ref.read(inventoryControllerProvider.notifier).adjustStock(
-            itemId: itemId,
-            delta: -qty,
-            type: StockMovementType.outQty,
-            note: 'Venta ${sale.numberLabel}',
-            ent: ent,
-          );
+      if (shouldDiscount) {
+        await ref.read(inventoryControllerProvider.notifier).adjustStock(
+              itemId: itemId,
+              delta: -qty,
+              type: StockMovementType.outQty,
+              note: 'Venta ${sale.numberLabel}',
+              ent: ent,
+            );
+      }
     }
   }
 
@@ -230,7 +468,8 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
         status: _status,
         documentType: _documentType,
-        documentNumber: _docCtrl.text.trim().isEmpty ? null : _docCtrl.text.trim(),
+        documentNumber:
+            _docCtrl.text.trim().isEmpty ? null : _docCtrl.text.trim(),
         customerNameOrBusinessName:
             _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
         customerPhone: _phoneE164.trim().isEmpty ? null : _phoneE164.trim(),
@@ -259,7 +498,9 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
     } catch (e) {
       _showInfo(e.toString().replaceFirst('Bad state: ', ''));
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -270,265 +511,199 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.sale.numberLabel),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: Text(
+                _inventoryLocked ? 'Inventario aplicado' : 'Borrador',
+                style: TextStyle(
+                  color: _inventoryLocked
+                      ? AppColors.billing
+                      : AppColors.workOrders,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check_circle_outline),
-            label: Text(_saving ? 'Registrando...' : 'Registrar venta'),
+      floatingActionButton: _inventoryLocked
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _addItem,
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar ítem'),
+            ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      DropdownButtonFormField<SaleDocumentType>(
+                        initialValue: _documentType,
+                        decoration: const InputDecoration(
+                          labelText: 'Documento',
+                        ),
+                        items: SaleDocumentType.values
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e.label),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _documentType = v);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _docCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'NIT / Documento',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nombre / Razón social',
+                        ),
+                        validator: (v) {
+                          if ((v ?? '').trim().isEmpty) {
+                            return 'Ingresa un nombre';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      IntlPhoneField(
+                        initialCountryCode: _phoneInitialCountryCode,
+                        initialValue: _phoneInitialNationalNumber,
+                        decoration: const InputDecoration(
+                          labelText: 'Teléfono',
+                        ),
+                        disableLengthCheck: true,
+                        onChanged: (phone) {
+                          _phoneE164 = _buildE164Phone(
+                            countryCode: phone.countryCode,
+                            nationalNumber: phone.number,
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _emailCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Correo electrónico',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<SaleStatus>(
+                        initialValue: _status,
+                        decoration: const InputDecoration(
+                          labelText: 'Estado',
+                        ),
+                        items: SaleStatus.values
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e.label),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _status = v);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _notesCtrl,
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: 'Notas',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Detalle',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              if (_lines.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('No hay ítems agregados.'),
+                  ),
+                )
+              else
+                ..._lines.map(
+                  (line) => QuoteLineTile(
+                    line: line,
+                    onEditQty: _inventoryLocked
+                        ? (_) {}
+                        : (qty) => _editQty(line.lineId, qty),
+                    onRemove: _inventoryLocked
+                        ? null
+                        : () => _removeLine(line.lineId),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Total',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Text(
+                        'Bs ${_fmt(total)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            if (_inventoryLocked) ...[
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.20),
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.lock_outline, color: AppColors.warning),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Esta venta ya actualizó inventario. Puedes cambiar datos del cliente o anularla, pero el detalle está bloqueado para evitar doble descuento.',
-                        style: AppTextStyles.body.copyWith(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(color: AppColors.border),
-                boxShadow: AppShadows.card,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Datos del cliente', style: AppTextStyles.title),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<SaleDocumentType>(
-                    initialValue: _documentType,
-                    items: SaleDocumentType.values
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(e.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _documentType = v);
-                    },
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de documento',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _docCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText:
-                          _documentType == SaleDocumentType.nit ? 'NIT' : 'CI',
-                      hintText: _documentType == SaleDocumentType.nit
-                          ? 'Ej: 1020304050'
-                          : 'Ej: 1234567',
-                      prefixIcon: const Icon(Icons.numbers_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _nameCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre o razón social',
-                      hintText: 'Ej: Juan Pérez o Imprenta Andina SRL',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
-                    ),
-                    validator: (v) {
-                      final hasDoc = _docCtrl.text.trim().isNotEmpty;
-                      if (hasDoc && (v == null || v.trim().isEmpty)) {
-                        return 'Si llenas documento, llena también el nombre.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  IntlPhoneField(
-                    initialCountryCode: _phoneInitialCountryCode,
-                    initialValue: _phoneInitialNationalNumber,
-                    decoration: const InputDecoration(
-                      labelText: 'Teléfono',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                    onChanged: (p) => _phoneE164 = p.completeNumber,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Correo electrónico',
-                      hintText: 'tucorreo@ejemplo.com',
-                      prefixIcon: Icon(Icons.mail_outline_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<SaleStatus>(
-                    initialValue: _status,
-                    items: SaleStatus.values
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(e.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _status = v);
-                    },
-                    decoration: const InputDecoration(
-                      labelText: 'Estado',
-                      prefixIcon: Icon(Icons.flag_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _notesCtrl,
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Notas',
-                      hintText: 'Observaciones de la venta',
-                      prefixIcon: Icon(Icons.notes_outlined),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Detalle', style: AppTextStyles.title),
-                ),
-                FilledButton.icon(
-                  onPressed: _inventoryLocked ? null : _addItem,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Agregar ítem'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_lines.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text(
-                  'Todavía no agregaste ítems a la venta.',
-                  style: AppTextStyles.body,
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else
-              ..._lines.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: QuoteLineTile(
-                    line: line,
-                    onRemove: () => _removeLine(line.lineId),
-                    onEditQty: (qty) => _editQty(line.lineId, qty),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(color: AppColors.border),
-                boxShadow: AppShadows.card,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Resumen', style: AppTextStyles.title),
-                  const SizedBox(height: 12),
-                  _SummaryRow(label: 'Subtotal', value: 'Bs ${_fmt(total)}'),
-                  const SizedBox(height: 6),
-                  _SummaryRow(
-                    label: 'Total',
-                    value: 'Bs ${_fmt(total)}',
-                    emphasized: true,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 90),
-          ],
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FilledButton.icon(
+          onPressed: _saving ? null : _save,
+          icon: _saving
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined),
+          label: Text(_saving ? 'Guardando...' : 'Guardar venta'),
         ),
       ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-    this.emphasized = false,
-  });
-
-  final String label;
-  final String value;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = emphasized
-        ? AppTextStyles.title.copyWith(fontSize: 16)
-        : AppTextStyles.body.copyWith(fontSize: 14);
-
-    return Row(
-      children: [
-        Expanded(child: Text(label, style: style)),
-        Text(value, style: style),
-      ],
     );
   }
 }

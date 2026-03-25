@@ -2,8 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart' show authStateProvider;
 import '../../company/presentation/company_providers.dart';
+import '../../quotes/domain/quote.dart';
+import '../../quotes/domain/quote_line.dart' as quote_line;
 import '../data/sales_local_store.dart';
 import '../domain/sale.dart';
+import '../domain/sale_document_type.dart';
 import '../domain/sale_status.dart';
 import 'sales_state.dart';
 
@@ -49,7 +52,9 @@ class SalesController extends AsyncNotifier<SalesState> {
 
   void setFilter(SaleStatus? status) {
     final cur = state.value ?? _empty;
-    state = AsyncData(cur.copyWith(filterStatus: status, clearFilter: status == null));
+    state = AsyncData(
+      cur.copyWith(filterStatus: status, clearFilter: status == null),
+    );
   }
 
   Future<void> reload() async {
@@ -83,9 +88,25 @@ class SalesController extends AsyncNotifier<SalesState> {
       year: y,
       createdAtMs: ms,
       updatedAtMs: ms,
-      status: SaleStatus.completed,
+      status: SaleStatus.draft,
       currency: 'BOB',
       lines: const [],
+    );
+  }
+
+  Future<Sale> createFromQuote(Quote quote) async {
+    final draft = await newDraft();
+    final hasNit = quote.customerNit?.trim().isNotEmpty ?? false;
+
+    return draft.copyWith(
+      customerNameOrBusinessName: (quote.billToName?.trim().isNotEmpty ?? false)
+          ? quote.billToName!.trim()
+          : quote.customerName,
+      customerPhone: quote.customerPhone,
+      documentType: hasNit ? SaleDocumentType.nit : null,
+      documentNumber: hasNit ? quote.customerNit!.trim() : null,
+      notes: quote.notes,
+      lines: List<quote_line.QuoteLine>.from(quote.lines),
     );
   }
 
