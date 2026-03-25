@@ -151,11 +151,13 @@ class QuotesOfflineFirstService {
         if (it == null) return l;
 
         final next = l.copyWith(
-          nameSnapshot: it.name,
-          skuSnapshot: it.sku,
-          unitSnapshot: it.unit,
-          costBobSnapshot: it.cost,
-          unitPriceBobSnapshot: it.salePrice,
+          nameSnapshot:         it.name,
+          skuSnapshot:          it.sku,
+          unitSnapshot:         it.unit,
+          costBobSnapshot:      it.cost,
+          // Solo actualizar precio si el inventario tiene uno — no pisar
+          // precios manuales ni dejar en 0 servicios sin precio configurado
+          unitPriceBobSnapshot: it.salePrice ?? l.unitPriceBobSnapshot,
         );
 
         // FIX: ahora QuoteLine implementa == correctamente,
