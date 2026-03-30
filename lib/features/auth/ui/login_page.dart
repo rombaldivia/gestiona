@@ -14,10 +14,10 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _email   = TextEditingController();
-  final _pass    = TextEditingController();
-  bool _loading  = false;
-  bool _obscure  = true;
+  final _email = TextEditingController();
+  final _pass = TextEditingController();
+  bool _loading = false;
+  bool _obscure = true;
 
   @override
   void dispose() {
@@ -31,9 +31,12 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await action();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -56,7 +59,8 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   children: [
                     Container(
-                      width: 72, height: 72,
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.circular(22),
@@ -64,17 +68,20 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       child: const Icon(
                         Icons.business_center_rounded,
-                        color: Colors.white, size: 36,
+                        color: Colors.white,
+                        size: 36,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text('Gestiona',
-                        style: AppTextStyles.display.copyWith(
-                          color: AppColors.primary, letterSpacing: -1,
-                        )),
+                    Text(
+                      'Gestiona',
+                      style: AppTextStyles.display.copyWith(
+                        color: AppColors.primary,
+                        letterSpacing: -1,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text('Tu empresa, bajo control',
-                        style: AppTextStyles.body),
+                    Text('Tu empresa, bajo control', style: AppTextStyles.body),
                   ],
                 ),
               ),
@@ -105,14 +112,19 @@ class _LoginPageState extends State<LoginPage> {
                     ),
 
                     const SizedBox(height: 16),
-                    Row(children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('o con correo', style: AppTextStyles.label),
-                      ),
-                      const Expanded(child: Divider()),
-                    ]),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'o con correo',
+                            style: AppTextStyles.label,
+                          ),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
                     const SizedBox(height: 16),
 
                     Form(
@@ -128,10 +140,9 @@ class _LoginPageState extends State<LoginPage> {
                               hintText: 'tucorreo@ejemplo.com',
                               prefixIcon: Icon(Icons.mail_outline_rounded),
                             ),
-                            validator: (v) =>
-                                (v == null || !v.contains('@'))
-                                    ? 'Correo inválido'
-                                    : null,
+                            validator: (v) => (v == null || !v.contains('@'))
+                                ? 'Correo inválido'
+                                : null,
                           ),
                           const SizedBox(height: 12),
 
@@ -141,7 +152,9 @@ class _LoginPageState extends State<LoginPage> {
                             textInputAction: TextInputAction.done,
                             decoration: InputDecoration(
                               labelText: 'Contraseña',
-                              prefixIcon: const Icon(Icons.lock_outline_rounded),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   _obscure
@@ -153,10 +166,9 @@ class _LoginPageState extends State<LoginPage> {
                                     setState(() => _obscure = !_obscure),
                               ),
                             ),
-                            validator: (v) =>
-                                (v == null || v.length < 6)
-                                    ? 'Mínimo 6 caracteres'
-                                    : null,
+                            validator: (v) => (v == null || v.length < 6)
+                                ? 'Mínimo 6 caracteres'
+                                : null,
                           ),
 
                           Align(
@@ -165,12 +177,13 @@ class _LoginPageState extends State<LoginPage> {
                               onPressed: _loading
                                   ? null
                                   : () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ForgotPasswordPage(
-                                              auth: widget.auth),
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ForgotPasswordPage(
+                                          auth: widget.auth,
                                         ),
                                       ),
+                                    ),
                               child: const Text('¿Olvidaste tu contraseña?'),
                             ),
                           ),
@@ -183,17 +196,23 @@ class _LoginPageState extends State<LoginPage> {
                               onPressed: _loading
                                   ? null
                                   : () => _run(() async {
-                                        if (!_formKey.currentState!.validate()) return;
-                                        await widget.auth.signInWithEmail(
-                                          email: _email.text.trim(),
-                                          password: _pass.text.trim(),
-                                        );
-                                      }),
+                                      if (!_formKey.currentState!.validate()) {
+                                        return;
+                                      }
+                                      await widget.auth.signInWithEmail(
+                                        email: _email.text.trim(),
+                                        password: _pass.text.trim(),
+                                      );
+                                    }),
                               child: _loading
                                   ? const SizedBox(
-                                      height: 20, width: 20,
+                                      height: 20,
+                                      width: 20,
                                       child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white))
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
                                   : const Text('Entrar'),
                             ),
                           ),
@@ -215,18 +234,20 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _loading
                         ? null
                         : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => RegisterPage(auth: widget.auth),
-                              ),
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RegisterPage(auth: widget.auth),
                             ),
+                          ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text('Crear cuenta',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Crear cuenta',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ],
               ),
@@ -242,6 +263,7 @@ class _LoginPageState extends State<LoginPage> {
 // ── Botón Google personalizado ────────────────────────────────────────────────
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.loading, required this.onTap});
+
   final bool loading;
   final VoidCallback onTap;
 
@@ -261,32 +283,23 @@ class _GoogleButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // G colorida con RichText
             SizedBox(
-              width: 24, height: 24,
-              child: Center(
-                child: RichText(
-                  text: const TextSpan(
-                    children: [
-                      TextSpan(text: 'G',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF4285F4),
-                            fontFamily: 'sans-serif',
-                          )),
-                    ],
-                  ),
-                ),
+              width: 18,
+              height: 18,
+              child: Image.asset(
+                'assets/brand/google_g_logo.png',
+                fit: BoxFit.contain,
               ),
             ),
             const SizedBox(width: 10),
-            Text('Continuar con Google',
-                style: AppTextStyles.label.copyWith(
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                )),
+            Text(
+              'Continuar con Google',
+              style: AppTextStyles.label.copyWith(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
