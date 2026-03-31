@@ -17,7 +17,17 @@ class AuthService {
   Future<UserCredential> registerWithEmail({
     required String email,
     required String password,
-  }) {
+  }) async {
+    final current = _auth.currentUser;
+
+    if (current != null && current.isAnonymous) {
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      return current.linkWithCredential(credential);
+    }
+
     return _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -29,6 +39,8 @@ class AuthService {
   }
 
   Future<UserCredential> signInWithGoogle() async {
+    final current = _auth.currentUser;
+
     final user = await _google.signIn();
     if (user == null) {
       throw FirebaseAuthException(
@@ -43,11 +55,21 @@ class AuthService {
       idToken: auth.idToken,
     );
 
+    if (current != null && current.isAnonymous) {
+      return current.linkWithCredential(credential);
+    }
+
     return _auth.signInWithCredential(credential);
   }
 
+  Future<UserCredential> signInAnonymously() {
+    return _auth.signInAnonymously();
+  }
+
   Future<void> signOut() async {
-    await _google.signOut();
+    try {
+      await _google.signOut();
+    } catch (_) {}
     await _auth.signOut();
   }
 }

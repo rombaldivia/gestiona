@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../data/auth_service.dart';
 import 'forgot_password_page.dart';
+import 'join_company_before_login_page.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -31,9 +33,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await action();
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -53,8 +53,6 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 52),
-
-              // ── Logo ──────────────────────────────────────────────────────
               Center(
                 child: Column(
                   children: [
@@ -85,10 +83,7 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 40),
-
-              // ── Card ──────────────────────────────────────────────────────
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.surface,
@@ -104,13 +99,10 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 4),
                     Text('Bienvenido de vuelta', style: AppTextStyles.body),
                     const SizedBox(height: 20),
-
-                    // Google
                     _GoogleButton(
                       loading: _loading,
                       onTap: () => _run(widget.auth.signInWithGoogle),
                     ),
-
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -126,7 +118,6 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
                     Form(
                       key: _formKey,
                       child: Column(
@@ -145,7 +136,6 @@ class _LoginPageState extends State<LoginPage> {
                                 : null,
                           ),
                           const SizedBox(height: 12),
-
                           TextFormField(
                             controller: _pass,
                             obscureText: _obscure,
@@ -170,7 +160,6 @@ class _LoginPageState extends State<LoginPage> {
                                 ? 'Mínimo 6 caracteres'
                                 : null,
                           ),
-
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
@@ -187,9 +176,7 @@ class _LoginPageState extends State<LoginPage> {
                               child: const Text('¿Olvidaste tu contraseña?'),
                             ),
                           ),
-
                           const SizedBox(height: 4),
-
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
@@ -222,10 +209,7 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // ── Crear cuenta ─────────────────────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -251,6 +235,22 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                JoinCompanyBeforeLoginPage(auth: widget.auth),
+                          ),
+                        ),
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                  label: const Text('Unirme a una empresa sin correo'),
+                ),
+              ),
               const SizedBox(height: 32),
             ],
           ),
@@ -260,7 +260,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// ── Botón Google personalizado ────────────────────────────────────────────────
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.loading, required this.onTap});
 

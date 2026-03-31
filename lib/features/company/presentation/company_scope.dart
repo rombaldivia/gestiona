@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 class CompanyScope extends InheritedWidget {
+  final String companyId;
+  final String companyName;
+
   const CompanyScope({
     super.key,
     required this.companyId,
@@ -8,11 +11,12 @@ class CompanyScope extends InheritedWidget {
     required super.child,
   });
 
-  final String companyId;
-  final String companyName;
+  static CompanyScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<CompanyScope>();
+  }
 
   static CompanyScope of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<CompanyScope>();
+    final scope = maybeOf(context);
     assert(scope != null, 'CompanyScope no está arriba en el árbol.');
     return scope!;
   }
