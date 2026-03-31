@@ -2,14 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null; }
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
 
     function companyDoc(companyId) {
       return get(/databases/$(database)/documents/companies/$(companyId));
     }
 
     function isOwner(companyId) {
-      return signedIn() && companyDoc(companyId).data.ownerUid == request.auth.uid;
+      return signedIn() &&
+        exists(/databases/$(database)/documents/companies/$(companyId)) &&
+        companyDoc(companyId).data.ownerUid == request.auth.uid;
     }
 
     function isMemberSub(companyId) {
@@ -19,69 +31,128 @@ service cloud.firestore {
 
     function isMemberTop(companyId) {
       return signedIn() &&
-        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + '_' + companyId));
+        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + "_" + companyId));
     }
 
     function isMember(companyId) {
-      return isMemberSub(companyId) || isMemberTop(companyId);
+      return isOwner(companyId) || isMemberSub(companyId) || isMemberTop(companyId);
+    }
+
+    function joinCodeDoc(code) {
+      return get(/databases/$(database)/documents/company_join_codes/$(code));
+    }
+
+    function hasJoinCode(code) {
+      return exists(/databases/$(database)/documents/company_join_codes/$(code));
+    }
+
+    function validJoinCodeForCompany(code, companyId) {
+      return hasJoinCode(code) &&
+        joinCodeDoc(code).data.companyId == companyId &&
+        (
+          !('active' in joinCodeDoc(code).data) ||
+          joinCodeDoc(code).data.active == true
+        ) &&
+        (
+          !('expiresAt' in joinCodeDoc(code).data) ||
+          joinCodeDoc(code).data.expiresAt > request.time
+        );
+    }
+
+    function requesterHasActiveOwner(uid) {
+      return signedIn() &&
+        userExists(request.auth.uid) &&
+        userDoc(request.auth.uid).data.activeCompanyId is string &&
+        userDoc(request.auth.uid).data.activeCompanyOwnerUid is string &&
+        userDoc(request.auth.uid).data.activeCompanyOwnerUid == uid &&
+        exists(
+          /databases/$(database)/documents/company_members/$(request.auth.uid + "_" + userDoc(request.auth.uid).data.activeCompanyId)
+        );
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid;
 
-      allow create: if signedIn()
-        && request.auth.uid == uid
-        && (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
-
-      allow update: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.plan == resource.data.plan;
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        requesterHasActiveOwner(uid)
+      );
 
       allow delete: if false;
     }
 
     match /companies/{companyId} {
-
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid;
-
-      allow read: if signedIn() && (isOwner(companyId) || isMember(companyId));
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if signedIn() && isMember(companyId);
       allow update, delete: if signedIn() && isOwner(companyId);
+
+      match /private/{docId} {
+        allow read, write: if signedIn() && isOwner(companyId);
+      }
 
       match /members/{uid} {
         allow read: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
-        allow create, delete: if signedIn() && isOwner(companyId);
-        allow update: if false;
+
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.joinCode is string
+          && validJoinCodeForCompany(request.resource.data.joinCode, companyId);
+
+        allow update: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
+        allow delete: if signedIn() && isOwner(companyId);
       }
 
       match /inventory_items/{docId} {
-        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+        allow read, write: if signedIn() && isMember(companyId);
       }
 
       match /stock_movements/{docId} {
-        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+        allow read, write: if signedIn() && isMember(companyId);
       }
 
-      // ✅ NUEVO: QUOTES
       match /quotes/{quoteId} {
-        allow read, write: if signedIn() && (isOwner(companyId) || isMember(companyId));
+        allow read, write: if signedIn() && isMember(companyId);
       }
     }
 
-    match /company_members/{memberDoc} {
+    match /company_join_codes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
       allow create: if signedIn()
         && request.resource.data.companyId is string
-        && request.resource.data.uid is string
         && isOwner(request.resource.data.companyId);
 
-      allow read: if signedIn() &&
-        (companyDoc(resource.data.companyId).data.ownerUid == request.auth.uid
-         || request.auth.uid == resource.data.uid);
+      allow update: if signedIn()
+        && resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && isOwner(resource.data.companyId);
 
       allow delete: if signedIn()
-        && companyDoc(resource.data.companyId).data.ownerUid == request.auth.uid;
+        && resource.data.companyId is string
+        && isOwner(resource.data.companyId);
+    }
 
-      allow update: if false;
+    match /company_members/{memberDoc} {
+      allow read: if signedIn() &&
+        resource != null &&
+        (
+          request.auth.uid == resource.data.uid ||
+          isOwner(resource.data.companyId)
+        );
+
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.companyId is string
+        && request.resource.data.joinCode is string
+        && validJoinCodeForCompany(
+          request.resource.data.joinCode,
+          request.resource.data.companyId
+        );
+
+      allow update: if signedIn() && resource != null && resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource != null && resource.data.uid == request.auth.uid;
     }
 
     match /{document=**} {

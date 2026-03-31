@@ -11,7 +11,8 @@ final entitlementsRepositoryProvider = Provider<EntitlementsRepository>((ref) {
   return EntitlementsRepository();
 });
 
-// Provider por UID (String)
+// Plan efectivo: si es miembro observa el plan del dueño,
+// si es dueño observa el suyo propio.
 final entitlementsProvider = StreamProvider.family<Entitlements, String>((
   ref,
   uid,
@@ -21,21 +22,21 @@ final entitlementsProvider = StreamProvider.family<Entitlements, String>((
   if (forcePro) {
     final e = Entitlements.forTier(PlanTier.pro);
     debugPrint(
-      '✅ entitlementsProvider FORCE_PRO=$forcePro uid=$uid tier=${e.tier} cloudSync=${e.cloudSync}',
+      '✅ entitlementsProvider FORCE_PRO=$forcePro uid=$uid tier=${e.tier}',
     );
     return Stream.value(e);
   }
 
-  // Fire-and-forget: si el user actual coincide con uid, asegura doc base
+  // Asegura doc base del usuario
   final u = FirebaseAuth.instance.currentUser;
   if (u != null && u.uid == uid) {
     UserBootstrapper.ensureUserDoc(u);
   }
 
   final repo = ref.watch(entitlementsRepositoryProvider);
-  return repo.watchUid(uid).map((e) {
+  return repo.watchEffective(uid).map((e) {
     debugPrint(
-      'ℹ️ entitlementsProvider FORCE_PRO=$forcePro uid=$uid tier=${e.tier} cloudSync=${e.cloudSync}',
+      'ℹ️ entitlementsProvider uid=$uid tier=${e.tier} cloudSync=${e.cloudSync}',
     );
     return e;
   });

@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Gestiona necesita la cámara para escanear códigos QR de acceso.</string>
 </dict>
 </plist>

@@ -14,92 +14,86 @@ class EntitlementsRepository {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
 
-  // Observa entitlements combinando:
-  // - Firestore: users/{uid}.plan
-  // - Claims: token "plan" (si existe)
   Stream<Entitlements> watchFor(User user) {
-    final controller = StreamController<Entitlements>.broadcast();
-
-    PlanTier? docTier;
-    PlanTier? claimsTier;
-
-    void emit() {
-      final tier = claimsTier ?? docTier ?? PlanTier.free;
-      controller.add(Entitlements.forTier(tier));
-    }
-
-    final docRef = _db.collection('users').doc(user.uid);
-
-    final docSub = docRef.snapshots().listen((snap) {
-      final data = snap.data();
-      docTier = PlanTier.fromString(data?['plan'] as String?);
-      emit();
-    }, onError: controller.addError);
-
-    final tokenSub = _auth.idTokenChanges().listen((u) async {
-      if (u == null) return;
-      claimsTier = await _tierFromClaims(u);
-      emit();
-    }, onError: controller.addError);
-
-    controller.onCancel = () async {
-      await docSub.cancel();
-      await tokenSub.cancel();
-      await controller.close();
-    };
-
-    () async {
-      try {
-        claimsTier = await _tierFromClaims(user);
-      } catch (_) {}
-      emit();
-    }();
-
-    return controller.stream.distinct((a, b) => a.tier == b.tier);
+    return watchUid(user.uid);
   }
 
-  // Compat: permite observar solo con uid (usa currentUser internamente).
+  // Compatibilidad con código viejo
+  Stream<Entitlements> watchEffective(String uid) {
+    return watchUid(uid);
+  }
+
   Stream<Entitlements> watchUid(String uid) {
     final controller = StreamController<Entitlements>.broadcast();
 
     PlanTier? docTier;
     PlanTier? claimsTier;
 
+    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? userSub;
+    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? planSub;
+    StreamSubscription<User?>? tokenSub;
+
+    String? boundPlanUid;
+
     void emit() {
-      final tier = claimsTier ?? docTier ?? PlanTier.free;
+      final tier = docTier ?? claimsTier ?? PlanTier.free;
       controller.add(Entitlements.forTier(tier));
     }
 
-    final docRef = _db.collection('users').doc(uid);
+    Future<void> bindPlanDoc(String sourceUid) async {
+      if (boundPlanUid == sourceUid && planSub != null) return;
+      boundPlanUid = sourceUid;
 
-    final docSub = docRef.snapshots().listen((snap) {
-      final data = snap.data();
-      docTier = PlanTier.fromString(data?['plan'] as String?);
-      emit();
+      await planSub?.cancel();
+      planSub = _db.collection('users').doc(sourceUid).snapshots().listen((
+        snap,
+      ) {
+        final data = snap.data();
+        docTier = PlanTier.fromString(data?['plan'] as String?);
+        emit();
+      }, onError: controller.addError);
+    }
+
+    userSub = _db.collection('users').doc(uid).snapshots().listen((snap) async {
+      final data = snap.data() ?? <String, dynamic>{};
+      final activeCompanyOwnerUid =
+          (data['activeCompanyOwnerUid'] as String? ?? '').trim();
+
+      final sourceUid = activeCompanyOwnerUid.isNotEmpty
+          ? activeCompanyOwnerUid
+          : uid;
+
+      await bindPlanDoc(sourceUid);
     }, onError: controller.addError);
 
-    final tokenSub = _auth.idTokenChanges().listen((u) async {
-      if (u == null) return;
-      if (u.uid != uid) return;
-      claimsTier = await _tierFromClaims(u);
+    tokenSub = _auth.idTokenChanges().listen((u) async {
+      if (u == null || u.uid != uid) return;
+      try {
+        claimsTier = await _tierFromClaims(u);
+      } catch (_) {
+        claimsTier = null;
+      }
       emit();
     }, onError: controller.addError);
-
-    controller.onCancel = () async {
-      await docSub.cancel();
-      await tokenSub.cancel();
-      await controller.close();
-    };
 
     () async {
       try {
-        final u = _auth.currentUser;
-        if (u != null && u.uid == uid) {
-          claimsTier = await _tierFromClaims(u);
+        final current = _auth.currentUser;
+        if (current != null && current.uid == uid) {
+          claimsTier = await _tierFromClaims(current);
         }
-      } catch (_) {}
+      } catch (_) {
+        claimsTier = null;
+      }
       emit();
     }();
+
+    controller.onCancel = () async {
+      await userSub?.cancel();
+      await planSub?.cancel();
+      await tokenSub?.cancel();
+      await controller.close();
+    };
 
     return controller.stream.distinct((a, b) => a.tier == b.tier);
   }

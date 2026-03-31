@@ -6,6 +6,7 @@ import '../../../core/activity/activity_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
+import '../../company/ui/team_access_page.dart';
 import '../../gemini/ui/gemini_chat_page.dart';
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../inventory/ui/inventory_item_form_page.dart';
@@ -39,9 +40,9 @@ class HomePage extends ConsumerWidget {
   Future<void> _signOut() async => auth.signOut();
 
   void _todo(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label (próximamente)')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label (próximamente)')));
   }
 
   void _openActivityTarget(
@@ -72,15 +73,13 @@ class HomePage extends ConsumerWidget {
           }
         }
         if (q != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: q)),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: q)));
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se encontró la cotización exacta.'),
-          ),
+          const SnackBar(content: Text('No se encontró la cotización exacta.')),
         );
         return;
 
@@ -116,10 +115,8 @@ class HomePage extends ConsumerWidget {
         if (item != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => InventoryItemFormPage(
-                initial: item,
-                proCloud: proCloud,
-              ),
+              builder: (_) =>
+                  InventoryItemFormPage(initial: item, proCloud: proCloud),
             ),
           );
           return;
@@ -135,39 +132,50 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ent     = EntitlementsScope.of(context);
+    final ent = EntitlementsScope.of(context);
     final company = CompanyScope.of(context);
 
     // Datos reales
     final quotes = ref.watch(quotesControllerProvider).value?.quotes ?? [];
     final orders = ref.watch(workOrdersControllerProvider).value?.orders ?? [];
-    final items  = ref.watch(inventoryItemsProvider);
+    final items = ref.watch(inventoryItemsProvider);
 
     final events = ref.watch(activityProvider).value ?? [];
 
-// TEMP: limpiar actividad vieja con labels rotos
-// ref.read(activityProvider.notifier).clear().ignore();
+    // TEMP: limpiar actividad vieja con labels rotos
+    // ref.read(activityProvider.notifier).clear().ignore();
 
     final recentActivity = events.take(8).toList();
 
     // Resumen de cotizaciones
-    final qDraft    = quotes.where((q) => q.status == QuoteStatus.draft).length;
-    final qSent     = quotes.where((q) => q.status == QuoteStatus.sent).length;
-    final qAccepted = quotes.where((q) => q.status == QuoteStatus.accepted).length;
+    final qDraft = quotes.where((q) => q.status == QuoteStatus.draft).length;
+    final qSent = quotes.where((q) => q.status == QuoteStatus.sent).length;
+    final qAccepted = quotes
+        .where((q) => q.status == QuoteStatus.accepted)
+        .length;
 
     // OTs pendientes/en progreso
-    final oActive = orders.where((o) =>
-        o.status.name == 'pending' || o.status.name == 'inProgress').length;
-    final oLate   = orders.where((o) {
+    final oActive = orders
+        .where(
+          (o) => o.status.name == 'pending' || o.status.name == 'inProgress',
+        )
+        .length;
+    final oLate = orders.where((o) {
       if (o.deliveryAtMs == null) return false;
-      return DateTime.fromMillisecondsSinceEpoch(o.deliveryAtMs!)
-          .isBefore(DateTime.now()) &&
-          o.status.name != 'done' && o.status.name != 'delivered';
+      return DateTime.fromMillisecondsSinceEpoch(
+            o.deliveryAtMs!,
+          ).isBefore(DateTime.now()) &&
+          o.status.name != 'done' &&
+          o.status.name != 'delivered';
     }).length;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(company.companyName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          company.companyName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle_outlined),
@@ -175,28 +183,57 @@ class HomePage extends ConsumerWidget {
               if (v == 'edit_company') {
                 await onEditCompanyName();
               } else if (v == 'sync') {
-                if (!ent.cloudSync) { _todo(context, 'Sync (requiere Pro)'); return; }
+                if (!ent.cloudSync) {
+                  _todo(context, 'Sync (requiere Pro)');
+                  return;
+                }
                 final messenger = ScaffoldMessenger.of(context);
-                messenger.showSnackBar(const SnackBar(content: Text('Sincronizando...')));
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Sincronizando...')),
+                );
                 try {
                   await onSyncPressed();
-                  messenger.showSnackBar(const SnackBar(content: Text('Sync OK ✅')));
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Sync OK ✅')),
+                  );
                 } catch (e) {
-                  messenger.showSnackBar(SnackBar(content: Text('Sync falló: $e')));
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Sync falló: $e')),
+                  );
                 }
+              } else if (v == 'team_access') {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CompanyScope(
+                      companyId: company.companyId,
+                      companyName: company.companyName,
+                      child: const TeamAccessPage(),
+                    ),
+                  ),
+                );
               } else if (v == 'logout') {
                 await _signOut();
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit_company', child: Text('Editar empresa')),
+              const PopupMenuItem(
+                value: 'edit_company',
+                child: Text('Editar empresa'),
+              ),
               PopupMenuItem(
                 value: 'sync',
                 enabled: ent.cloudSync,
                 child: Text(ent.cloudSync ? 'Sync ahora' : 'Sync (Pro)'),
               ),
+              const PopupMenuItem(
+                value: 'team_access',
+                child: Text('Equipo y acceso QR'),
+              ),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Text('Cerrar sesión'),
+              ),
             ],
           ),
         ],
@@ -204,19 +241,20 @@ class HomePage extends ConsumerWidget {
 
       extendBody: true,
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const GeminiChatPage()),
-        ),
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const GeminiChatPage())),
         backgroundColor: const Color(0xFF1565C0),
-        icon:  const Icon(Icons.auto_awesome, color: Colors.white),
-        label: const Text('Asistente IA',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        icon: const Icon(Icons.auto_awesome, color: Colors.white),
+        label: const Text(
+          'Asistente IA',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
       ),
 
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
-
           // ── Barra de estado ────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -225,119 +263,153 @@ class HomePage extends ConsumerWidget {
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(color: AppColors.border),
             ),
-              child: Row(children: [
-              Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: ent.cloudSync ? AppColors.success : AppColors.textHint,
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ent.cloudSync
+                        ? AppColors.success
+                        : AppColors.textHint,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(ent.cloudSync ? 'Sincronización activa' : 'Modo local',
-                  style: AppTextStyles.label),
-              const Spacer(),
-              Text(_todayString(), style: AppTextStyles.label),
-            ]),
+                const SizedBox(width: 8),
+                Text(
+                  ent.cloudSync ? 'Sincronización activa' : 'Modo local',
+                  style: AppTextStyles.label,
+                ),
+                const Spacer(),
+                Text(_todayString(), style: AppTextStyles.label),
+              ],
+            ),
           ),
 
           const SizedBox(height: 16),
 
           // ── Resumen rápido ────────────────────────────────────────────────
-          Row(children: [
-            _SummaryChip(label: '$qDraft borradores',   color: AppColors.textSecondary),
-            const SizedBox(width: 8),
-            _SummaryChip(label: '$qSent enviadas',      color: AppColors.quotes),
-            const SizedBox(width: 8),
-            _SummaryChip(label: '$qAccepted aceptadas', color: AppColors.success),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            _SummaryChip(label: '$oActive OTs activas',  color: AppColors.workOrders),
-            if (oLate > 0) ...[
+          Row(
+            children: [
+              _SummaryChip(
+                label: '$qDraft borradores',
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 8),
-              _SummaryChip(label: '$oLate atrasadas', color: Colors.redAccent),
+              _SummaryChip(label: '$qSent enviadas', color: AppColors.quotes),
+              const SizedBox(width: 8),
+              _SummaryChip(
+                label: '$qAccepted aceptadas',
+                color: AppColors.success,
+              ),
             ],
-          ]),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _SummaryChip(
+                label: '$oActive OTs activas',
+                color: AppColors.workOrders,
+              ),
+              if (oLate > 0) ...[
+                const SizedBox(width: 8),
+                _SummaryChip(
+                  label: '$oLate atrasadas',
+                  color: Colors.redAccent,
+                ),
+              ],
+            ],
+          ),
 
           const SizedBox(height: 16),
 
           _FeaturedSalesCard(
             onNewSale: () async {
-              final draft = await ref.read(salesControllerProvider.notifier).newDraft();
+              final draft = await ref
+                  .read(salesControllerProvider.notifier)
+                  .newDraft();
               if (!context.mounted) return;
               await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => SaleEditorPage(sale: draft)),
               );
             },
             onViewSales: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SalesPage()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SalesPage()));
             },
           ),
 
           const SizedBox(height: 18),
 
           // ── Grid de módulos ───────────────────────────────────────────────
-          Row(children: [
-            Expanded(
-              child: _ModuleCard(
-                color: AppColors.quotes,
-                icon: Icons.request_quote_outlined,
-                title: 'Cotizaciones',
-                subtitle: '${quotes.length} total',
-                buttonText: 'Abrir',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const QuotesTabsPage())),
+          Row(
+            children: [
+              Expanded(
+                child: _ModuleCard(
+                  color: AppColors.quotes,
+                  icon: Icons.request_quote_outlined,
+                  title: 'Cotizaciones',
+                  subtitle: '${quotes.length} total',
+                  buttonText: 'Abrir',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QuotesTabsPage()),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ModuleCard(
-                color: AppColors.workOrders,
-                icon: Icons.engineering_outlined,
-                title: 'Órdenes de trabajo',
-                subtitle: '$oActive activas',
-                buttonText: 'Abrir',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const WorkOrdersPage())),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ModuleCard(
+                  color: AppColors.workOrders,
+                  icon: Icons.engineering_outlined,
+                  title: 'Órdenes de trabajo',
+                  subtitle: '$oActive activas',
+                  buttonText: 'Abrir',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const WorkOrdersPage()),
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
 
           const SizedBox(height: 12),
 
-          Row(children: [
-            Expanded(
-              child: _ModuleCard(
-                color: AppColors.inventory,
-                icon: Icons.inventory_2_outlined,
-                title: 'Inventario',
-                subtitle: 'Stock y movimientos',
-                buttonText: 'Abrir',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const InventoryPage())),
+          Row(
+            children: [
+              Expanded(
+                child: _ModuleCard(
+                  color: AppColors.inventory,
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Inventario',
+                  subtitle: 'Stock y movimientos',
+                  buttonText: 'Abrir',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const InventoryPage()),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ModuleCard(
-                color: AppColors.billing,
-                icon: Icons.receipt_long_outlined,
-                title: 'Facturación',
-                subtitle: 'Cobros e impuestos',
-                buttonText: 'Abrir',
-                onPressed: () => _todo(context, 'Facturación'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ModuleCard(
+                  color: AppColors.billing,
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Facturación',
+                  subtitle: 'Cobros e impuestos',
+                  buttonText: 'Abrir',
+                  onPressed: () => _todo(context, 'Facturación'),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
 
           const SizedBox(height: 20),
 
           // ── Actividad reciente ────────────────────────────────────────────
-          Text('Actividad reciente',
-              style: AppTextStyles.title.copyWith(fontSize: 15)),
+          Text(
+            'Actividad reciente',
+            style: AppTextStyles.title.copyWith(fontSize: 15),
+          ),
           const SizedBox(height: 10),
 
           if (recentActivity.isEmpty)
@@ -349,7 +421,10 @@ class HomePage extends ConsumerWidget {
                 border: Border.all(color: AppColors.border),
               ),
               child: Center(
-                child: Text('Sin actividad todavía', style: AppTextStyles.label),
+                child: Text(
+                  'Sin actividad todavía',
+                  style: AppTextStyles.label,
+                ),
               ),
             )
           else
@@ -387,7 +462,21 @@ class HomePage extends ConsumerWidget {
 
   String _todayString() {
     final now = DateTime.now();
-    const months = ['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const months = [
+      '',
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
     return '${now.day} ${months[now.month]}';
   }
 }
@@ -396,7 +485,7 @@ class HomePage extends ConsumerWidget {
 class _SummaryChip extends StatelessWidget {
   const _SummaryChip({required this.label, required this.color});
   final String label;
-  final Color  color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -407,9 +496,14 @@ class _SummaryChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(label,
-          style: AppTextStyles.label.copyWith(
-              color: color, fontWeight: FontWeight.w600, fontSize: 11)),
+      child: Text(
+        label,
+        style: AppTextStyles.label.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
+        ),
+      ),
     );
   }
 }
@@ -430,10 +524,7 @@ class _FeaturedSalesCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppColors.primary,
-            AppColors.primaryLight,
-          ],
+          colors: [AppColors.primary, AppColors.primaryLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -482,7 +573,10 @@ class _FeaturedSalesCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -566,10 +660,7 @@ class _FeaturedSalesCard extends StatelessWidget {
 }
 
 class _SalesFeatureChip extends StatelessWidget {
-  const _SalesFeatureChip({
-    required this.icon,
-    required this.label,
-  });
+  const _SalesFeatureChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -604,10 +695,15 @@ class _SalesFeatureChip extends StatelessWidget {
 // ── Tarjeta de módulo ─────────────────────────────────────────────────────────
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({
-    required this.color, required this.icon, required this.title,
-    required this.subtitle, required this.buttonText, required this.onPressed,
+    required this.color,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.buttonText,
+    required this.onPressed,
   });
-  final Color color; final IconData icon;
+  final Color color;
+  final IconData icon;
   final String title, subtitle, buttonText;
   final VoidCallback onPressed;
 
@@ -627,7 +723,8 @@ class _ModuleCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -635,14 +732,22 @@ class _ModuleCard extends StatelessWidget {
               child: Icon(icon, color: color, size: 19),
             ),
             const SizedBox(height: 10),
-            Text(title,
-                style: AppTextStyles.title.copyWith(fontSize: 13, color: color),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              title,
+              style: AppTextStyles.title.copyWith(fontSize: 13, color: color),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 2),
-            Text(subtitle,
-                style: AppTextStyles.label.copyWith(
-                    color: color.withValues(alpha: 0.65), fontSize: 11),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              subtitle,
+              style: AppTextStyles.label.copyWith(
+                color: color.withValues(alpha: 0.65),
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -650,17 +755,20 @@ class _ModuleCard extends StatelessWidget {
                 color: color,
                 borderRadius: BorderRadius.circular(AppRadius.xs),
               ),
-              child: Text(buttonText,
-                  style: AppTextStyles.label.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.w700)),
+              child: Text(
+                buttonText,
+                style: AppTextStyles.label.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
-        ),
+      ),
     );
   }
 }
-
 
 // ── Ítem de evento real ───────────────────────────────────────────────────────
 class _ActivityEventItem extends StatelessWidget {
@@ -803,7 +911,9 @@ class _ActivityEventItem extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     color: color.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.pill,
+                                    ),
                                   ),
                                   child: Text(
                                     _verbLabel,
