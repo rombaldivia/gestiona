@@ -125,7 +125,8 @@ class _PendingJoinResolver extends StatefulWidget {
 class _PendingJoinResolverState extends State<_PendingJoinResolver> {
   final _store = PendingJoinStore();
 
-  bool _checkingJoin = true;
+  bool _booting = true;
+  bool _hasPendingInvite = false;
   String? _joinError;
 
   @override
@@ -137,23 +138,38 @@ class _PendingJoinResolverState extends State<_PendingJoinResolver> {
   }
 
   Future<void> _resolvePendingJoin() async {
-    final code = await _store.getCode();
-
-    if (code == null || code.isEmpty) {
-      if (!mounted) return;
-      setState(() => _checkingJoin = false);
-      return;
-    }
-
     try {
-      await widget.onJoin(code);
-      await _store.clear();
+      final code = await _store.getCode();
+
+      if (code == null || code.trim().isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _booting = false;
+          _hasPendingInvite = false;
+        });
+        return;
+      }
+
       if (!mounted) return;
+      setState(() {
+        _hasPendingInvite = true;
+        _joinError = null;
+      });
+
+      await widget.onJoin(code.trim());
+      await _store.clear();
       await widget.onReload();
+
+      if (!mounted) return;
+      setState(() {
+        _booting = false;
+        _hasPendingInvite = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _checkingJoin = false;
+        _booting = false;
+        _hasPendingInvite = true;
         _joinError = e.toString();
       });
     }
@@ -161,7 +177,55 @@ class _PendingJoinResolverState extends State<_PendingJoinResolver> {
 
   @override
   Widget build(BuildContext context) {
-    if (_checkingJoin) {
+    if (_booting || _hasPendingInvite) {
+      if (_joinError != null) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Error de invitación')),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'No se pudo completar la invitación de empresa.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(_joinError!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () async {
+                          await widget.auth.signOut();
+                        },
+                        child: const Text('Volver'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () async {
+                          await _store.clear();
+                          if (!mounted) return;
+                          setState(() {
+                            _hasPendingInvite = false;
+                            _joinError = null;
+                          });
+                        },
+                        child: const Text('Continuar sin invitación'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
       return const Scaffold(
         body: Center(
           child: Padding(
@@ -179,67 +243,20 @@ class _PendingJoinResolverState extends State<_PendingJoinResolver> {
       );
     }
 
-    if (_joinError != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Error de invitación')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'No se pudo completar la invitación de empresa.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                Text(_joinError!, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () async {
-                        await widget.auth.signOut();
-                      },
-                      child: const Text('Volver al login'),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: () async {
-                        await _store.clear();
-                        if (!mounted) return;
-                        setState(() {
-                          _joinError = null;
-                        });
-                      },
-                      child: const Text('Continuar sin invitación'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+    if (widget.company.hasCompany) {
+      return CompanyScope(
+        companyId: widget.company.companyId!,
+        companyName: widget.company.companyName!,
+        child: HomeShellPage(
+          auth: widget.auth,
+          user: widget.user,
+          onSyncPressed: widget.onSyncPressed,
+          onEditCompanyName: widget.onEditCompanyName,
         ),
       );
     }
 
-    if (!widget.company.hasCompany) {
-      return _CreateCompanyScreen(user: widget.user, onCreate: widget.onCreate);
-    }
-
-    return CompanyScope(
-      companyId: widget.company.companyId!,
-      companyName: widget.company.companyName!,
-      child: HomeShellPage(
-        auth: widget.auth,
-        user: widget.user,
-        onSyncPressed: widget.onSyncPressed,
-        onEditCompanyName: widget.onEditCompanyName,
-      ),
-    );
+    return _CreateCompanyScreen(user: widget.user, onCreate: widget.onCreate);
   }
 }
 
@@ -254,86 +271,81 @@ class _CreateCompanyScreen extends StatefulWidget {
 }
 
 class _CreateCompanyScreenState extends State<_CreateCompanyScreen> {
-  final _companyNameController = TextEditingController();
-  bool _creating = false;
+  final _controller = TextEditingController();
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _companyNameController.text = _suggestCompanyName(widget.user);
+    final email = (widget.user.email ?? '').trim();
+    final seed = email.isNotEmpty ? email.split('@').first : 'Mi empresa';
+    _controller.text = seed;
   }
 
   @override
   void dispose() {
-    _companyNameController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _createCompany() async {
-    final name = _companyNameController.text.trim();
+  Future<void> _submit() async {
+    final name = _controller.text.trim();
     if (name.isEmpty) return;
 
-    setState(() => _creating = true);
+    setState(() => _busy = true);
     try {
       await widget.onCreate(name);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear la empresa: $e')),
+      );
     } finally {
-      if (mounted) setState(() => _creating = false);
+      if (mounted) setState(() => _busy = false);
     }
-  }
-
-  String _suggestCompanyName(User user) {
-    final displayName = (user.displayName ?? '').trim();
-    if (displayName.isNotEmpty) return displayName;
-
-    final email = (user.email ?? '').trim();
-    if (email.isNotEmpty && email.contains('@')) {
-      final local = email.split('@').first.trim();
-      if (local.isNotEmpty) return local;
-    }
-
-    return 'Mi empresa';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Crear empresa')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Crear empresa'),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Si eres el dueño, crea tu empresa aquí. Si te invitaron, vuelve al login y usa “Unirme a una empresa”.',
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _companyNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre de la empresa',
-                      hintText: 'Ej: Hermenca',
-                    ),
-                    onSubmitted: (_) => _createCompany(),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _creating ? null : _createCompany,
-                      child: Text(_creating ? 'Creando...' : 'Crear empresa'),
-                    ),
-                  ),
-                ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            shrinkWrap: true,
+            children: [
+              const Text(
+                'Todavía no tienes una empresa activa.',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
               ),
-            ),
+              const SizedBox(height: 12),
+              const Text(
+                'Crea una empresa para empezar a usar Gestiona.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _controller,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _busy ? null : _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre de la empresa',
+                  hintText: 'Ej: Hermenca',
+                  prefixIcon: Icon(Icons.business_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _busy ? null : _submit,
+                icon: const Icon(Icons.add_business_outlined),
+                label: Text(_busy ? 'Creando...' : 'Crear empresa'),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

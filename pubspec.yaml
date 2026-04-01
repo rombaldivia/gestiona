@@ -34,9 +34,19 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/brand/gestiona_logo.png
+    - assets/brand/gestiona_logo_mark.png
     - assets/brand/google_g_logo.png
-    - assets/brand/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/brand/gestiona_logo_mark.png
+  adaptive_icon_foreground: assets/brand/gestiona_logo_mark.png
+  adaptive_icon_background: "#0D47A1"
+  remove_alpha_ios: true

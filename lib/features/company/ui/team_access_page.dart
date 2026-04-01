@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/company_access_service.dart';
 import '../domain/company_member.dart';
 import '../presentation/company_scope.dart';
+import '../presentation/company_providers.dart';
+import '../../subscription/presentation/entitlements_providers.dart';
 import 'qr_join_scanner_page.dart';
 
 class TeamAccessPage extends ConsumerStatefulWidget {
@@ -146,6 +149,11 @@ class _TeamAccessPageState extends ConsumerState<TeamAccessPage> {
       final joined = await _service.joinWithCode(raw);
       if (!mounted) return;
       _joinCodeController.clear();
+      ref.invalidate(companyControllerProvider);
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        ref.invalidate(entitlementsProvider(uid));
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
