@@ -8,7 +8,7 @@ class CompanyRepository {
   final FirebaseFirestore _db;
 
   Stream<List<CompanySummary>> watchUserCompanies(String uid) {
-    final ref = _db.collection('users').doc(uid).collection('companies');
+    final ref = _db.collection('companies').where('ownerUid', isEqualTo: uid);
 
     return ref.snapshots().map((snap) {
       return snap.docs.map((d) {

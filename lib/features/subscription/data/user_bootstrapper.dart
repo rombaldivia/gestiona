@@ -2,25 +2,32 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class UserBootstrapper {
-  static final _db = FirebaseFirestore.instance;
+  UserBootstrapper({FirebaseFirestore? db})
+    : _db = db ?? FirebaseFirestore.instance;
 
-  static Future<void> ensureUserDoc(User user) async {
+  final FirebaseFirestore _db;
+
+  Future<void> ensureUserDoc(User user) async {
+    if (user.isAnonymous) return;
+
     final ref = _db.collection('users').doc(user.uid);
     final snap = await ref.get();
 
-    final data = <String, dynamic>{
-      'uid': user.uid,
-      'email': user.email,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-
-    // SOLO en creación
-    if (!snap.exists) {
-      data['plan'] = 'free';
-      data['createdAt'] = FieldValue.serverTimestamp();
+    if (snap.exists) {
+      await ref.set({
+        'uid': user.uid,
+        if ((user.email ?? '').trim().isNotEmpty) 'email': user.email!.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return;
     }
 
-    // merge para no pisar plan
-    await ref.set(data, SetOptions(merge: true));
+    await ref.set({
+      'uid': user.uid,
+      if ((user.email ?? '').trim().isNotEmpty) 'email': user.email!.trim(),
+      'plan': 'free',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

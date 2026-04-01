@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/activity/activity_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/gestiona_logo.dart';
 import '../../auth/data/auth_service.dart';
 import '../../company/presentation/company_scope.dart';
 import '../../company/ui/team_access_page.dart';
@@ -171,6 +172,11 @@ class HomePage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 64,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 12),
+          child: Center(child: GestionaLogoMark(size: 34)),
+        ),
         title: Text(
           company.companyName,
           maxLines: 1,

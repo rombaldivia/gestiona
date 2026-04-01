@@ -47,10 +47,14 @@ class CompanyAccessService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return false;
 
-    final snap = await _db.collection('companies').doc(companyId).get();
-    final data = snap.data();
-    if (data == null) return false;
-    return data['ownerUid'] == uid;
+    try {
+      final snap = await _db.collection('companies').doc(companyId).get();
+      final data = snap.data();
+      if (data == null) return false;
+      return data['ownerUid'] == uid;
+    } on FirebaseException {
+      return false;
+    }
   }
 
   Stream<List<CompanyMember>> watchMembers({required String companyId}) {
@@ -186,12 +190,6 @@ class CompanyAccessService {
         .collection('members')
         .doc(uid);
 
-    final companyMemberRef = _db
-        .collection('company_members')
-        .doc('${uid}_${joinData.companyId}');
-
-    final userRef = _db.collection('users').doc(uid);
-
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final name = _bestUserName(user);
     final email = (user.email ?? '').trim();
@@ -206,43 +204,14 @@ class CompanyAccessService {
           'role': joinData.role,
           'joinedAtMs': nowMs,
           'joinCode': joinData.code,
+          'companyId': joinData.companyId,
+          'companyName': resolvedCompanyName,
+          'isAnonymous': user.isAnonymous,
         },
         'escribiendo companies/${joinData.companyId}/members/$uid',
         merge: true,
       );
-
-      await _safeSet(
-        companyMemberRef,
-        {
-          'uid': uid,
-          'companyId': joinData.companyId,
-          'companyName': resolvedCompanyName,
-          'ownerUid': ownerUid,
-          'email': email,
-          'name': name,
-          'role': joinData.role,
-          'joinedAtMs': nowMs,
-          'joinCode': joinData.code,
-        },
-        'escribiendo company_members/${uid}_${joinData.companyId}',
-        merge: true,
-      );
     }
-
-    await _safeSet(
-      userRef,
-      {
-        'uid': uid,
-        if (email.isNotEmpty) 'email': email,
-        'activeCompanyId': joinData.companyId,
-        'activeCompanyName': resolvedCompanyName,
-        'activeCompanyOwnerUid': ownerUid,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastJoinAt': FieldValue.serverTimestamp(),
-      },
-      'escribiendo users/$uid',
-      merge: true,
-    );
 
     await _local.setActiveCompany(
       uid: uid,

@@ -115,17 +115,22 @@ class InventoryPage extends ConsumerWidget {
                               return Card(
                                 child: ListTile(
                                   onTap: () async {
-                                    final edited = await Navigator.push<InventoryItem>(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => InventoryItemFormPage(
-                                          initial: item,
-                                          proCloud: isPro,
-                                        ),
-                                      ),
-                                    );
+                                    final edited =
+                                        await Navigator.push<InventoryItem>(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                InventoryItemFormPage(
+                                                  initial: item,
+                                                  proCloud: isPro,
+                                                ),
+                                          ),
+                                        );
                                     if (edited != null) {
-                                      await ctrl.upsertItem(item: edited, ent: ent);
+                                      await ctrl.upsertItem(
+                                        item: edited,
+                                        ent: ent,
+                                      );
                                     }
                                   },
                                   title: Row(

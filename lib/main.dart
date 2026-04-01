@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/di/providers.dart';
+import 'core/widgets/gestiona_logo.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/ui/login_page.dart';
 import 'features/company/presentation/company_gate.dart';
@@ -32,8 +33,18 @@ class App extends ConsumerWidget {
       builder: (context, child) {
         final w = child ?? const SizedBox.shrink();
         return authState.when(
-          loading: () =>
-              const Scaffold(body: Center(child: CircularProgressIndicator())),
+          loading: () => Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const GestionaLogoMark(size: 64),
+                    SizedBox(height: 20),
+                    CircularProgressIndicator(),
+                  ],
+                ),
+              ),
+            ),
           error: (e, _) => Scaffold(
             body: Center(
               child: Padding(
@@ -51,8 +62,18 @@ class App extends ConsumerWidget {
 
       // ✅ Home según sesión
       home: authState.when(
-        loading: () =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        loading: () => Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const GestionaLogoMark(size: 64),
+                  SizedBox(height: 20),
+                  CircularProgressIndicator(),
+                ],
+              ),
+            ),
+          ),
         error: (e, _) => Scaffold(
           body: Center(
             child: Padding(

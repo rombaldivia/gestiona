@@ -6,21 +6,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userDoc(uid) {
-      return get(/databases/$(database)/documents/users/$(uid));
-    }
-
-    function userExists(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid));
-    }
-
     function companyDoc(companyId) {
       return get(/databases/$(database)/documents/companies/$(companyId));
     }
 
+    function companyExists(companyId) {
+      return exists(/databases/$(database)/documents/companies/$(companyId));
+    }
+
     function isOwner(companyId) {
       return signedIn() &&
-        exists(/databases/$(database)/documents/companies/$(companyId)) &&
+        companyExists(companyId) &&
         companyDoc(companyId).data.ownerUid == request.auth.uid;
     }
 
@@ -29,13 +25,8 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
     }
 
-    function isMemberTop(companyId) {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/company_members/$(request.auth.uid + "_" + companyId));
-    }
-
     function isMember(companyId) {
-      return isOwner(companyId) || isMemberSub(companyId) || isMemberTop(companyId);
+      return isOwner(companyId) || isMemberSub(companyId);
     }
 
     function joinCodeDoc(code) {
@@ -59,25 +50,9 @@ service cloud.firestore {
         );
     }
 
-    function requesterHasActiveOwner(uid) {
-      return signedIn() &&
-        userExists(request.auth.uid) &&
-        userDoc(request.auth.uid).data.activeCompanyId is string &&
-        userDoc(request.auth.uid).data.activeCompanyOwnerUid is string &&
-        userDoc(request.auth.uid).data.activeCompanyOwnerUid == uid &&
-        exists(
-          /databases/$(database)/documents/company_members/$(request.auth.uid + "_" + userDoc(request.auth.uid).data.activeCompanyId)
-        );
-    }
-
     match /users/{uid} {
       allow create, update: if signedIn() && request.auth.uid == uid;
-
-      allow read: if signedIn() && (
-        request.auth.uid == uid ||
-        requesterHasActiveOwner(uid)
-      );
-
+      allow read: if signedIn() && request.auth.uid == uid;
       allow delete: if false;
     }
 
@@ -111,6 +86,10 @@ service cloud.firestore {
         allow read, write: if signedIn() && isMember(companyId);
       }
 
+      match /work_orders/{workOrderId} {
+        allow read, write: if signedIn() && isMember(companyId);
+      }
+
       match /quotes/{quoteId} {
         allow read, write: if signedIn() && isMember(companyId);
       }
@@ -135,24 +114,7 @@ service cloud.firestore {
     }
 
     match /company_members/{memberDoc} {
-      allow read: if signedIn() &&
-        resource != null &&
-        (
-          request.auth.uid == resource.data.uid ||
-          isOwner(resource.data.companyId)
-        );
-
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.companyId is string
-        && request.resource.data.joinCode is string
-        && validJoinCodeForCompany(
-          request.resource.data.joinCode,
-          request.resource.data.companyId
-        );
-
-      allow update: if signedIn() && resource != null && resource.data.uid == request.auth.uid;
-      allow delete: if signedIn() && resource != null && resource.data.uid == request.auth.uid;
+      allow read, write: if false;
     }
 
     match /{document=**} {

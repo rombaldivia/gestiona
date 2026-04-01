@@ -1,126 +1,129 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:http/http.dart' as http;
-
-class DollarRepository {
-  DollarRepository({FirebaseFirestore? db})
-    : _db = db ?? FirebaseFirestore.instance;
-
-  final FirebaseFirestore _db;
-
-  static const _apiUrl = 'https://bo.dolarapi.com/v1/dolares/binance';
-
-  Stream<DollarProtectionState> watchState(String uid) {
-    final ref = _db.collection('users').doc(uid);
-    return ref.snapshots().map((snap) {
-      final data = snap.data();
-      return DollarProtectionState.fromUserDoc(data);
-    });
-  }
-
-  Future<double> fetchLastRate() async {
-    final res = await http.get(Uri.parse(_apiUrl));
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-    final json = jsonDecode(res.body) as Map<String, dynamic>;
-    final v = json['venta'];
-    if (v is num) return v.toDouble();
-    throw Exception('Respuesta inesperada: falta "venta"');
-  }
-
-  /// Activa protección dólar a nivel usuario guardando baseRate=lastRate.
-  Future<void> enableAndSetBase(String uid) async {
-    final last = await fetchLastRate();
-    await _db.collection('users').doc(uid).set({
-      'dollarProtection': {
-        'enabled': true,
-        'baseRate': last,
-        'lastRate': last,
-        'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        'provider': 'binance',
-      },
-    }, SetOptions(merge: true));
-  }
-
-  /// Apaga la protección dólar (no borra rates, solo enabled=false).
-  Future<void> disable(String uid) async {
-    await _db.collection('users').doc(uid).set({
-      'dollarProtection': {'enabled': false},
-    }, SetOptions(merge: true));
-  }
-
-  /// Actualiza lastRate (no cambia baseRate).
-  Future<void> refreshLast(String uid) async {
-    final last = await fetchLastRate();
-    await _db.collection('users').doc(uid).set({
-      'dollarProtection': {
-        'lastRate': last,
-        'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        'provider': 'binance',
-      },
-    }, SetOptions(merge: true));
-  }
-
-  /// Setea baseRate manualmente (y actualiza metadata). No toca lastRate.
-  Future<void> setBaseRate(
-    String uid,
-    double baseRate, {
-    String provider = 'manual',
-  }) async {
-    await _db.collection('users').doc(uid).set({
-      'dollarProtection': {
-        'baseRate': baseRate,
-        'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        'provider': provider,
-      },
-    }, SetOptions(merge: true));
-  }
-
-  /// Setea baseRate y lastRate al valor actual de la API (una sola llamada).
-  Future<void> setBaseAndLastToCurrent(String uid) async {
-    final last = await fetchLastRate();
-    await _db.collection('users').doc(uid).set({
-      'dollarProtection': {
-        'baseRate': last,
-        'lastRate': last,
-        'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        'provider': 'binance',
-      },
-    }, SetOptions(merge: true));
-  }
-
-  static double? adjustAmount({
-    required double baseAmount,
-    required double? baseRate,
-    required double? lastRate,
-  }) {
-    if (baseRate == null || lastRate == null) return null;
-    if (baseRate <= 0) return null;
-    final factor = lastRate / baseRate;
-    return baseAmount * factor;
-  }
-}
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DollarProtectionState {
   const DollarProtectionState({
-    required this.enabled,
-    this.baseRate,
-    this.lastRate,
+    this.dollarMode,
+    this.manualDollarRate,
+    this.binanceDollarRate,
+    this.lastFetchedDollarRate,
   });
 
-  final bool enabled;
-  final double? baseRate;
-  final double? lastRate;
+  final String? dollarMode;
+  final double? manualDollarRate;
+  final double? binanceDollarRate;
+  final double? lastFetchedDollarRate;
 
-  factory DollarProtectionState.fromUserDoc(Map<String, dynamic>? data) {
-    final dp = (data?['dollarProtection'] as Map?)?.cast<String, dynamic>();
-    if (dp == null) return const DollarProtectionState(enabled: false);
+  double? get baseRate =>
+      manualDollarRate ?? binanceDollarRate ?? lastFetchedDollarRate;
+
+  factory DollarProtectionState.fromMap(Map<String, dynamic>? data) {
+    double? asDouble(dynamic v) => v is num ? v.toDouble() : null;
+
     return DollarProtectionState(
-      enabled: (dp['enabled'] as bool?) ?? false,
-      baseRate: (dp['baseRate'] as num?)?.toDouble(),
-      lastRate: (dp['lastRate'] as num?)?.toDouble(),
+      dollarMode: data?['dollarMode'] as String?,
+      manualDollarRate: asDouble(data?['manualDollarRate']),
+      binanceDollarRate: asDouble(data?['binanceDollarRate']),
+      lastFetchedDollarRate: asDouble(data?['lastFetchedDollarRate']),
     );
+  }
+}
+
+class DollarRepository {
+  DollarRepository({FirebaseFirestore? db, FirebaseAuth? auth})
+    : _db = db ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
+
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
+
+  DocumentReference<Map<String, dynamic>> _userRef(String uid) {
+    return _db.collection('users').doc(uid);
+  }
+
+  bool _canUseUsersDoc(String uid) {
+    final user = _auth.currentUser;
+    return user != null && user.uid == uid && !user.isAnonymous;
+  }
+
+  Future<Map<String, dynamic>?> getUserDollarData(String uid) async {
+    if (!_canUseUsersDoc(uid)) return null;
+    final snap = await _userRef(uid).get();
+    return snap.data();
+  }
+
+  Stream<DollarProtectionState> watchState(String uid) {
+    if (!_canUseUsersDoc(uid)) {
+      return Stream.value(const DollarProtectionState());
+    }
+
+    return _userRef(
+      uid,
+    ).snapshots().map((snap) => DollarProtectionState.fromMap(snap.data()));
+  }
+
+  Future<double?> fetchLastRate([String? uid]) async {
+    final resolvedUid = uid ?? _auth.currentUser?.uid;
+    if (resolvedUid == null) return null;
+
+    final data = await getUserDollarData(resolvedUid);
+    final value = data?['lastFetchedDollarRate'];
+    return value is num ? value.toDouble() : null;
+  }
+
+  Future<void> setManualRate({required String uid, required num rate}) async {
+    if (!_canUseUsersDoc(uid)) return;
+
+    await _userRef(uid).set({
+      'dollarMode': 'manual',
+      'manualDollarRate': rate.toDouble(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> setBinanceRate({required String uid, required num rate}) async {
+    if (!_canUseUsersDoc(uid)) return;
+
+    await _userRef(uid).set({
+      'dollarMode': 'binance',
+      'binanceDollarRate': rate.toDouble(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> setLastFetchedRate({
+    required String uid,
+    required num rate,
+  }) async {
+    if (!_canUseUsersDoc(uid)) return;
+
+    await _userRef(uid).set({
+      'lastFetchedDollarRate': rate.toDouble(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> setDollarPreference({
+    required String uid,
+    required String mode,
+  }) async {
+    if (!_canUseUsersDoc(uid)) return;
+
+    await _userRef(uid).set({
+      'dollarMode': mode,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> clearDollarData(String uid) async {
+    if (!_canUseUsersDoc(uid)) return;
+
+    await _userRef(uid).set({
+      'dollarMode': FieldValue.delete(),
+      'manualDollarRate': FieldValue.delete(),
+      'binanceDollarRate': FieldValue.delete(),
+      'lastFetchedDollarRate': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

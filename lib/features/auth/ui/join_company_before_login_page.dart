@@ -1,25 +1,28 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../company/data/company_access_service.dart';
 import '../../company/data/pending_join_store.dart';
+import '../../company/presentation/company_providers.dart';
+import '../../subscription/presentation/entitlements_providers.dart';
 import '../data/auth_service.dart';
 import 'qr_scanner_page.dart';
 
-class JoinCompanyBeforeLoginPage extends StatefulWidget {
+class JoinCompanyBeforeLoginPage extends ConsumerStatefulWidget {
   const JoinCompanyBeforeLoginPage({super.key, required this.auth});
 
   final AuthService auth;
 
   @override
-  State<JoinCompanyBeforeLoginPage> createState() =>
+  ConsumerState<JoinCompanyBeforeLoginPage> createState() =>
       _JoinCompanyBeforeLoginPageState();
 }
 
 class _JoinCompanyBeforeLoginPageState
-    extends State<JoinCompanyBeforeLoginPage> {
+    extends ConsumerState<JoinCompanyBeforeLoginPage> {
   final _store = PendingJoinStore();
   final _service = CompanyAccessService();
   final _controller = TextEditingController();
@@ -78,34 +81,33 @@ class _JoinCompanyBeforeLoginPageState
 
     setState(() => _busy = true);
     try {
-      await _store.saveCode(code);
-
       if (FirebaseAuth.instance.currentUser == null) {
         await widget.auth.signInAnonymously();
       }
 
-      await _service.joinWithCode(code);
+      final joined = await _service.joinWithCode(code);
       await _store.clear();
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      ref.invalidate(companyControllerProvider);
+      if (uid != null) {
+        ref.invalidate(entitlementsProvider(uid));
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Te uniste a la empresa correctamente.')),
+        SnackBar(
+          content: Text(
+            'Te uniste a ${joined.companyName} como ${joined.role}.',
+          ),
+        ),
       );
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
-
-      var message = 'No se pudo unir a la empresa: $e';
-
-      final raw = e.toString();
-      if (raw.contains('admin-restricted-operation')) {
-        message =
-            'No se puede continuar sin correo porque el acceso anónimo está desactivado en Firebase Authentication. Activa Anonymous en Firebase Console > Authentication > Sign-in method.';
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo unir a la empresa: $e')),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -147,7 +149,7 @@ class _JoinCompanyBeforeLoginPageState
                         Text(
                           signedIn
                               ? 'Escanea el QR o pega el código y al continuar entrarás directo a la empresa.'
-                              : 'Escanea el QR o pega el código. Al continuar te crearé una sesión temporal y entrarás directo a la empresa.',
+                              : 'Escanea el QR o pega el código. Al continuar se creará una sesión temporal y entrarás directo a la empresa.',
                           style: AppTextStyles.body,
                         ),
                         const SizedBox(height: 16),
@@ -191,13 +193,7 @@ class _JoinCompanyBeforeLoginPageState
                             icon: const Icon(
                               Icons.check_circle_outline_rounded,
                             ),
-                            label: Text(
-                              _busy
-                                  ? 'Procesando...'
-                                  : signedIn
-                                  ? 'Continuar e ingresar'
-                                  : 'Continuar sin correo',
-                            ),
+                            label: Text(_busy ? 'Procesando...' : 'Continuar'),
                           ),
                         ),
                       ],

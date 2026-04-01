@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/gestiona_logo.dart';
 import '../data/auth_service.dart';
+import '../../company/data/pending_join_store.dart';
+import '../../company/data/company_access_service.dart';
+import 'link_account_page.dart';
 import 'forgot_password_page.dart';
+import '../../company/data/company_local_store.dart';
 import 'join_company_before_login_page.dart';
 import 'register_page.dart';
 
@@ -32,6 +38,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _loading = true);
     try {
       await action();
+      await _consumePendingJoinIfNeeded();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -40,6 +47,42 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _consumePendingJoinIfNeeded() async {
+    final store = PendingJoinStore();
+    final code = await store.getCode();
+    if (code == null || code.isEmpty) return;
+    try {
+      await CompanyAccessService().joinWithCode(code);
+      await store.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Te uniste a la empresa correctamente.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo unir: \$e')));
+    }
+  }
+
+  Future<bool> _maybeLinkInsteadOfLogin() async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (current == null || !current.isAnonymous) return false;
+
+    final local = await CompanyLocalStore().getActiveCompany(uid: current.uid);
+    if (local == null) return false;
+    if (!mounted) return true;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LinkAccountPage(auth: widget.auth)),
+    );
+    return true;
   }
 
   @override
@@ -53,36 +96,7 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 52),
-              Center(
-                child: Column(
-                  children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: AppShadows.elevated,
-                      ),
-                      child: const Icon(
-                        Icons.business_center_rounded,
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Gestiona',
-                      style: AppTextStyles.display.copyWith(
-                        color: AppColors.primary,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text('Tu empresa, bajo control', style: AppTextStyles.body),
-                  ],
-                ),
-              ),
+              Center(child: const GestionaLogoLockup()),
               const SizedBox(height: 40),
               Container(
                 decoration: BoxDecoration(
@@ -101,7 +115,11 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     _GoogleButton(
                       loading: _loading,
-                      onTap: () => _run(widget.auth.signInWithGoogle),
+                      onTap: () => _run(() async {
+                        final redirected = await _maybeLinkInsteadOfLogin();
+                        if (redirected) return;
+                        await widget.auth.signInWithGoogle();
+                      }),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -186,6 +204,9 @@ class _LoginPageState extends State<LoginPage> {
                                       if (!_formKey.currentState!.validate()) {
                                         return;
                                       }
+                                      final redirected =
+                                          await _maybeLinkInsteadOfLogin();
+                                      if (redirected) return;
                                       await widget.auth.signInWithEmail(
                                         email: _email.text.trim(),
                                         password: _pass.text.trim(),

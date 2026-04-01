@@ -29,8 +29,11 @@ final entitlementsProvider = StreamProvider.family<Entitlements, String>((
 
   // Asegura doc base del usuario
   final u = FirebaseAuth.instance.currentUser;
+  debugPrint(
+    'AUTH currentUser uid=${u?.uid} anon=${u?.isAnonymous} targetUid=$uid',
+  );
   if (u != null && u.uid == uid) {
-    UserBootstrapper.ensureUserDoc(u);
+    UserBootstrapper().ensureUserDoc(u);
   }
 
   final repo = ref.watch(entitlementsRepositoryProvider);

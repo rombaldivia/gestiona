@@ -52,6 +52,7 @@ class CompanyOfflineFirstService {
           email: user.email,
           companyId: companyId,
           companyName: companyName,
+          ent: ent,
         );
         await _local.removePendingCompany(uid, companyId); // <- 2 args
       } catch (_) {
@@ -92,6 +93,7 @@ class CompanyOfflineFirstService {
           email: user.email,
           companyId: companyId,
           companyName: newName,
+          ent: ent,
         );
         await _local.removePendingCompany(uid, companyId);
       } catch (_) {
@@ -119,6 +121,7 @@ class CompanyOfflineFirstService {
       email: user.email,
       companyId: companyId,
       companyName: companyName,
+      ent: ent,
     );
 
     await _local.removePendingCompany(uid, companyId);
@@ -130,11 +133,14 @@ class CompanyOfflineFirstService {
     required String? email,
     required String companyId,
     required String companyName,
+    required Entitlements ent,
   }) async {
     final nowServer = FieldValue.serverTimestamp();
 
     // companies/{companyId}
     await _db.collection('companies').doc(companyId).set({
+      'plan': ent.tier.name,
+      'subscriptionPlan': ent.tier.name,
       'name': companyName,
       'ownerUid': uid,
       'createdAt': nowServer,
@@ -145,8 +151,6 @@ class CompanyOfflineFirstService {
     await _db.collection('users').doc(uid).set({
       'uid': uid,
       if (email != null) 'email': email,
-      'activeCompanyId': companyId,
-      'activeCompanyName': companyName,
       'updatedAt': nowServer,
       'lastSyncAt': nowServer,
     }, SetOptions(merge: true));
