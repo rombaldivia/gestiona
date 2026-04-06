@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -247,16 +248,139 @@ class _PendingJoinResolverState extends State<_PendingJoinResolver> {
       return CompanyScope(
         companyId: widget.company.companyId!,
         companyName: widget.company.companyName!,
-        child: HomeShellPage(
+        child: _MembershipRevocationGuard(
           auth: widget.auth,
           user: widget.user,
-          onSyncPressed: widget.onSyncPressed,
-          onEditCompanyName: widget.onEditCompanyName,
+          companyId: widget.company.companyId!,
+          companyName: widget.company.companyName!,
+          child: HomeShellPage(
+            auth: widget.auth,
+            user: widget.user,
+            onSyncPressed: widget.onSyncPressed,
+            onEditCompanyName: widget.onEditCompanyName,
+          ),
         ),
       );
     }
 
     return _CreateCompanyScreen(user: widget.user, onCreate: widget.onCreate);
+  }
+}
+
+class _MembershipRevocationGuard extends ConsumerStatefulWidget {
+  const _MembershipRevocationGuard({
+    required this.auth,
+    required this.user,
+    required this.companyId,
+    required this.companyName,
+    required this.child,
+  });
+
+  final AuthService auth;
+  final User user;
+  final String companyId;
+  final String companyName;
+  final Widget child;
+
+  @override
+  ConsumerState<_MembershipRevocationGuard> createState() =>
+      _MembershipRevocationGuardState();
+}
+
+class _MembershipRevocationGuardState
+    extends ConsumerState<_MembershipRevocationGuard> {
+  bool _handled = false;
+  bool _ownerChecked = false;
+  bool _isOwner = false;
+
+  Future<void> _handleRevoked() async {
+    if (_handled || !mounted) return;
+    _handled = true;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Acceso revocado'),
+        content: const Text(
+          'Tu acceso a esta empresa fue revocado por el administrador.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    await widget.auth.signOut();
+    ref.invalidate(companyControllerProvider);
+  }
+
+  Future<void> _loadOwnerStatus() async {
+    if (_ownerChecked) return;
+    _ownerChecked = true;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(widget.companyId)
+          .get();
+      final data = snap.data();
+      _isOwner = data != null && data['ownerUid'] == widget.user.uid;
+    } catch (_) {
+      _isOwner = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final memberRef = FirebaseFirestore.instance
+        .collection('companies')
+        .doc(widget.companyId)
+        .collection('members')
+        .doc(widget.user.uid);
+
+    return FutureBuilder<void>(
+      future: _loadOwnerStatus(),
+      builder: (context, ownerSnap) {
+        if (ownerSnap.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (_isOwner) {
+          return widget.child;
+        }
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: memberRef.snapshots(),
+          builder: (context, snap) {
+            final hasPermissionError =
+                snap.hasError &&
+                snap.error is FirebaseException &&
+                (snap.error as FirebaseException).code == 'permission-denied';
+
+            final missingMembership = snap.hasData && !snap.data!.exists;
+
+            if (hasPermissionError || missingMembership) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _handleRevoked();
+              });
+
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            return widget.child;
+          },
+        );
+      },
+    );
   }
 }
 

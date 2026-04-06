@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -346,254 +347,261 @@ class _QuoteEditorPageState extends ConsumerState<QuoteEditorPage> {
         Entitlements.forTier(PlanTier.free);
     final isPro = ent.tier == PlanTier.pro;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (!didPop) await _save();
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('COT #${widget.quote.sequence}-${widget.quote.year}'),
-          actions: [
-            IconButton(
-              tooltip: 'Revertir recotización',
-              icon: const Icon(Icons.undo),
-              onPressed: (_undoLinesSnapshot == null) ? null : _undoRecotize,
-            ),
-            IconButton(
-              tooltip: isPro ? 'Recotizar' : 'Recotizar (API solo PRO)',
-              icon: const Icon(Icons.currency_exchange),
-              onPressed: () async {
-                await QuoteRecotizeSheet.open(
-                  context: context,
-                  lines: _lines,
-                  onApply: (newLines) {
-                    _stashUndoSnapshot();
-                    setState(
-                      () => _lines
-                        ..clear()
-                        ..addAll(newLines),
-                    );
-                  },
-                );
-              },
-            ),
-            IconButton(
-              tooltip: 'WhatsApp',
-              icon: const Icon(Icons.chat),
-              onPressed: (!hasPhone || !hasLines)
-                  ? null
-                  : () => _sendWhatsapp(total),
-            ),
-            IconButton(
-              tooltip: 'PDF',
-              icon: const Icon(Icons.picture_as_pdf),
-              onPressed: !hasLines ? null : _sharePdf,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: DropdownButton<QuoteStatus>(
-                value: _status,
-                underline: const SizedBox.shrink(),
-                borderRadius: BorderRadius.circular(16),
-                items: QuoteStatus.values
-                    .map(
-                      (s) => DropdownMenuItem(
-                        value: s,
-                        child: Text(
-                          s.label,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (s) {
-                  if (s != null) setState(() => _status = s);
+    return ModulePermissionGuard(
+      moduleKey: 'quotes',
+      moduleLabel: 'Cotizaciones',
+      requireEdit: true,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (!didPop) await _save();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text('COT #${widget.quote.sequence}-${widget.quote.year}'),
+            actions: [
+              IconButton(
+                tooltip: 'Revertir recotización',
+                icon: const Icon(Icons.undo),
+                onPressed: (_undoLinesSnapshot == null) ? null : _undoRecotize,
+              ),
+              IconButton(
+                tooltip: isPro ? 'Recotizar' : 'Recotizar (API solo PRO)',
+                icon: const Icon(Icons.currency_exchange),
+                onPressed: () async {
+                  await QuoteRecotizeSheet.open(
+                    context: context,
+                    lines: _lines,
+                    onApply: (newLines) {
+                      _stashUndoSnapshot();
+                      setState(
+                        () => _lines
+                          ..clear()
+                          ..addAll(newLines),
+                      );
+                    },
+                  );
                 },
               ),
-            ),
-          ],
-        ),
-        body: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              TextFormField(
-                controller: _titleCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del proyecto',
-                  hintText: 'Ej: Impresión catálogo Hermenca',
-                  prefixIcon: Icon(Icons.label_outline),
-                ),
+              IconButton(
+                tooltip: 'WhatsApp',
+                icon: const Icon(Icons.chat),
+                onPressed: (!hasPhone || !hasLines)
+                    ? null
+                    : () => _sendWhatsapp(total),
               ),
-              const SizedBox(height: 12),
-              _DeliveryDatePicker(
-                valueMs: _deliveryAtMs,
-                onChanged: (ms) => setState(() => _deliveryAtMs = ms),
+              IconButton(
+                tooltip: 'PDF',
+                icon: const Icon(Icons.picture_as_pdf),
+                onPressed: !hasLines ? null : _sharePdf,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _customerCtrl,
-                decoration: const InputDecoration(labelText: 'Cliente'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nitCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'NIT / CI',
-                  hintText: 'Ej: 1234567',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _billToCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Factura a nombre de',
-                  hintText: 'Ej: Empresa Hermenca S.R.L.',
-                  prefixIcon: Icon(Icons.receipt_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              IntlPhoneField(
-                initialCountryCode: _phoneInitialCountryCode,
-                initialValue: _phoneInitialNationalNumber,
-                decoration: const InputDecoration(labelText: 'Teléfono'),
-                onChanged: (p) => _phoneE164 = p.completeNumber,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _notesCtrl,
-                decoration: const InputDecoration(labelText: 'Notas'),
-                minLines: 2,
-                maxLines: 6,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _addItem,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ítem'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed: _addProcess,
-                      icon: const Icon(Icons.playlist_add),
-                      label: const Text('Proceso'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const SizedBox(height: 12),
-              if (_status == QuoteStatus.accepted && hasLines)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(
-                      alpha: 0.35,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Siguiente paso',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF312E81),
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: _createWorkOrder,
-                            icon: const Icon(Icons.engineering_outlined),
-                            label: const Text('Crear OT',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF15803D),
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: _completeToSale,
-                            icon: const Icon(Icons.point_of_sale_outlined),
-                            label: const Text('Completar a venta',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              if (_lines.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text('Aún no hay ítems en la cotización.'),
-                ),
-              for (final l in _lines)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: QuoteLineTile(
-                    line: l,
-                    onRemove: () => setState(() => _lines.remove(l)),
-                    onEditQty: (newQty) {
-                      setState(() {
-                        final idx = _lines.indexOf(l);
-                        if (idx >= 0) _lines[idx] = l.copyWith(qty: newQty);
-                      });
-                    },
-                  ),
-                ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: scheme.surface,
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: DropdownButton<QuoteStatus>(
+                  value: _status,
+                  underline: const SizedBox.shrink(),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: scheme.outlineVariant),
+                  items: QuoteStatus.values
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(
+                            s.label,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (s) {
+                    if (s != null) setState(() => _status = s);
+                  },
                 ),
-                child: Row(
+              ),
+            ],
+          ),
+          body: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextFormField(
+                  controller: _titleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del proyecto',
+                    hintText: 'Ej: Impresión catálogo Hermenca',
+                    prefixIcon: Icon(Icons.label_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DeliveryDatePicker(
+                  valueMs: _deliveryAtMs,
+                  onChanged: (ms) => setState(() => _deliveryAtMs = ms),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customerCtrl,
+                  decoration: const InputDecoration(labelText: 'Cliente'),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _nitCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'NIT / CI',
+                    hintText: 'Ej: 1234567',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _billToCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Factura a nombre de',
+                    hintText: 'Ej: Empresa Hermenca S.R.L.',
+                    prefixIcon: Icon(Icons.receipt_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                IntlPhoneField(
+                  initialCountryCode: _phoneInitialCountryCode,
+                  initialValue: _phoneInitialNationalNumber,
+                  decoration: const InputDecoration(labelText: 'Teléfono'),
+                  onChanged: (p) => _phoneE164 = p.completeNumber,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _notesCtrl,
+                  decoration: const InputDecoration(labelText: 'Notas'),
+                  minLines: 2,
+                  maxLines: 6,
+                ),
+                const SizedBox(height: 16),
+                Row(
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Total',
-                        style: TextStyle(fontWeight: FontWeight.w800),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _addItem,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Ítem'),
                       ),
                     ),
-                    Text(
-                      'Bs ${_fmt(total)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: scheme.primary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _addProcess,
+                        icon: const Icon(Icons.playlist_add),
+                        label: const Text('Proceso'),
                       ),
                     ),
                   ],
                 ),
-              ),
-
-            ],
+                const SizedBox(height: 12),
+                const SizedBox(height: 12),
+                if (_status == QuoteStatus.accepted && hasLines)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(
+                        alpha: 0.35,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Siguiente paso',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF312E81),
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _createWorkOrder,
+                              icon: const Icon(Icons.engineering_outlined),
+                              label: const Text(
+                                'Crear OT',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF15803D),
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _completeToSale,
+                              icon: const Icon(Icons.point_of_sale_outlined),
+                              label: const Text(
+                                'Completar a venta',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_lines.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Text('Aún no hay ítems en la cotización.'),
+                  ),
+                for (final l in _lines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: QuoteLineTile(
+                      line: l,
+                      onRemove: () => setState(() => _lines.remove(l)),
+                      onEditQty: (newQty) {
+                        setState(() {
+                          final idx = _lines.indexOf(l);
+                          if (idx >= 0) _lines[idx] = l.copyWith(qty: newQty);
+                        });
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Total',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Text(
+                        'Bs ${_fmt(total)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

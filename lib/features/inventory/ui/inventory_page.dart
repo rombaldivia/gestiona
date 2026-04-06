@@ -1,6 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../company/presentation/member_permissions_providers.dart';
+import '../../company/presentation/member_permissions_helpers.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 
 import '../../company/presentation/company_providers.dart';
 import '../../dollar/presentation/dollar_providers.dart';
@@ -18,6 +21,10 @@ class InventoryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ent = EntitlementsScope.of(context);
+    final currentMember = ref.watch(currentMemberProvider).asData?.value;
+    final canEditInventory =
+        currentMember == null ||
+        canEditModule(currentMember.permissions, 'inventory');
 
     // ✅ PRO real (para features locales como SKU + margen)
     final isPro = ent.tier == PlanTier.pro;
@@ -31,326 +38,353 @@ class InventoryPage extends ConsumerWidget {
     final invAsync = ref.watch(inventoryControllerProvider);
     final ctrl = ref.read(inventoryControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inventario'),
-        actions: [
-          IconButton(
-            tooltip: ent.cloudSync ? 'Sync' : 'Sync (Plus/Pro)',
-            onPressed: ent.cloudSync
-                ? () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('Sincronizando inventario...'),
-                      ),
-                    );
-                    try {
-                      final n = await ctrl.sync(ent: ent);
+    return ModulePermissionGuard(
+      moduleKey: 'inventory',
+      moduleLabel: 'Inventario',
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Inventario'),
+          actions: [
+            IconButton(
+              tooltip: ent.cloudSync ? 'Sync' : 'Sync (Plus/Pro)',
+              onPressed: ent.cloudSync
+                  ? () async {
+                      final messenger = ScaffoldMessenger.of(context);
                       messenger.showSnackBar(
-                        SnackBar(content: Text('Sync OK ✅ ($n cambios)')),
+                        const SnackBar(
+                          content: Text('Sincronizando inventario...'),
+                        ),
                       );
-                    } catch (e) {
-                      messenger.showSnackBar(
-                        SnackBar(content: Text('Sync falló: $e')),
-                      );
+                      try {
+                        final n = await ctrl.sync(ent: ent);
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Sync OK ✅ ($n cambios)')),
+                        );
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Sync falló: $e')),
+                        );
+                      }
                     }
-                  }
-                : null,
-            icon: const Icon(Icons.sync),
-          ),
-        ],
-      ),
-      body: companyAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error empresa: $e')),
-        data: (company) {
-          if (company.companyId == null) {
-            return const Center(
-              child: Text(
-                'No hay empresa activa.\nCrea o selecciona una empresa primero.',
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
+                  : null,
+              icon: const Icon(Icons.sync),
+            ),
+          ],
+        ),
+        body: companyAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error empresa: $e')),
+          data: (company) {
+            if (company.companyId == null) {
+              return const Center(
+                child: Text(
+                  'No hay empresa activa.\nCrea o selecciona una empresa primero.',
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
 
-          return invAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error inventario: $e')),
-            data: (s) {
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: TextField(
-                      onChanged: ctrl.setQuery,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        labelText: 'Buscar ítem',
-                        hintText: 'Nombre o SKU',
+            return invAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error inventario: $e')),
+              data: (s) {
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: TextField(
+                        onChanged: ctrl.setQuery,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          labelText: 'Buscar ítem',
+                          hintText: 'Nombre o SKU',
+                        ),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: s.filtered.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Sin ítems todavía.\n\nCrea el primero con "+".',
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                            itemCount: s.filtered.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (_, i) {
-                              final item = s.filtered[i];
-                              final isService =
-                                  item.kind == InventoryItemKind.servicio;
-                              final low =
-                                  item.minStock != null &&
-                                  item.stock <= item.minStock!;
+                    Expanded(
+                      child: s.filtered.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Sin ítems todavía.\n\nCrea el primero con "+".',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                8,
+                                16,
+                                120,
+                              ),
+                              itemCount: s.filtered.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (_, i) {
+                                final item = s.filtered[i];
+                                final isService =
+                                    item.kind == InventoryItemKind.servicio;
+                                final low =
+                                    item.minStock != null &&
+                                    item.stock <= item.minStock!;
 
-                              return Card(
-                                child: ListTile(
-                                  onTap: () async {
-                                    final edited =
-                                        await Navigator.push<InventoryItem>(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                InventoryItemFormPage(
-                                                  initial: item,
-                                                  proCloud: isPro,
-                                                ),
-                                          ),
+                                return Card(
+                                  child: ListTile(
+                                    onTap: () async {
+                                      final edited =
+                                          await Navigator.push<InventoryItem>(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  InventoryItemFormPage(
+                                                    initial: item,
+                                                    proCloud: isPro,
+                                                  ),
+                                            ),
+                                          );
+                                      if (edited != null) {
+                                        await ctrl.upsertItem(
+                                          item: edited,
+                                          ent: ent,
                                         );
-                                    if (edited != null) {
-                                      await ctrl.upsertItem(
-                                        item: edited,
-                                        ent: ent,
-                                      );
-                                    }
-                                  },
-                                  title: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          item.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _KindChip(kind: item.kind),
-                                      if (item.dirty)
-                                        const Padding(
-                                          padding: EdgeInsets.only(left: 8),
-                                          child: Icon(
-                                            Icons.cloud_off,
-                                            size: 18,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      }
+                                    },
+                                    title: Row(
                                       children: [
-                                        Text(
-                                          'SKU: ${item.sku?.trim().isNotEmpty == true ? item.sku : '-'}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        Expanded(
+                                          child: Text(
+                                            item.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        if (isService) ...[
-                                          Text(
-                                            item.pricingMode == 'hourly'
-                                                ? 'Tarifa/hora: ${_fmtMoney(item.salePrice)}'
-                                                : 'Precio: ${_fmtMoney(item.salePrice)}',
+                                        const SizedBox(width: 8),
+                                        _KindChip(kind: item.kind),
+                                        if (item.dirty)
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 8),
+                                            child: Icon(
+                                              Icons.cloud_off,
+                                              size: 18,
+                                            ),
                                           ),
-                                        ] else ...[
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  'Precio: ${_fmtMoney(item.salePrice)}',
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Stock: ${_fmt(item.stock.toDouble())} ${item.unit ?? ''}',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  color: low
-                                                      ? Colors.redAccent
-                                                      : null,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
                                       ],
                                     ),
-                                  ),
-                                  trailing: PopupMenuButton<String>(
-                                    onSelected: (v) async {
-                                      if (v == 'restock') {
-                                        await _askRestockStockOnly(
-                                          context,
-                                          ctrl,
-                                          ent,
-                                          item,
-                                        );
-                                      } else if (v == 'purchase') {
-                                        if (!proCloud || uid == null) return;
-                                        await _askPurchaseStockAndCost(
-                                          context: context,
-                                          ref: ref,
-                                          ctrl: ctrl,
-                                          ent: ent,
-                                          uid: uid,
-                                          item: item,
-                                        );
-                                      } else if (v == 'out') {
-                                        await _askAdjust(
-                                          context,
-                                          ctrl,
-                                          ent,
-                                          item,
-                                          isIn: false,
-                                        );
-                                      } else if (v == 'edit') {
-                                        final edited =
-                                            await Navigator.push<InventoryItem>(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    InventoryItemFormPage(
-                                                      initial: item,
-                                                      proCloud:
-                                                          isPro, // ✅ SOLO PRO (SKU + margen)
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'SKU: ${item.sku?.trim().isNotEmpty == true ? item.sku : '-'}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          if (isService) ...[
+                                            Text(
+                                              item.pricingMode == 'hourly'
+                                                  ? 'Tarifa/hora: ${_fmtMoney(item.salePrice)}'
+                                                  : 'Precio: ${_fmtMoney(item.salePrice)}',
+                                            ),
+                                          ] else ...[
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    'Precio: ${_fmtMoney(item.salePrice)}',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Stock: ${_fmt(item.stock.toDouble())} ${item.unit ?? ''}',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: low
+                                                        ? Colors.redAccent
+                                                        : null,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    trailing: canEditInventory
+                                        ? PopupMenuButton<String>(
+                                            onSelected: (v) async {
+                                              if (v == 'restock') {
+                                                await _askRestockStockOnly(
+                                                  context,
+                                                  ctrl,
+                                                  ent,
+                                                  item,
+                                                );
+                                              } else if (v == 'purchase') {
+                                                if (!proCloud || uid == null) {
+                                                  return;
+                                                }
+                                                await _askPurchaseStockAndCost(
+                                                  context: context,
+                                                  ref: ref,
+                                                  ctrl: ctrl,
+                                                  ent: ent,
+                                                  uid: uid,
+                                                  item: item,
+                                                );
+                                              } else if (v == 'out') {
+                                                await _askAdjust(
+                                                  context,
+                                                  ctrl,
+                                                  ent,
+                                                  item,
+                                                  isIn: false,
+                                                );
+                                              } else if (v == 'edit') {
+                                                final edited =
+                                                    await Navigator.push<
+                                                      InventoryItem
+                                                    >(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            InventoryItemFormPage(
+                                                              initial: item,
+                                                              proCloud:
+                                                                  isPro, // ✅ SOLO PRO (SKU + margen)
+                                                            ),
+                                                      ),
+                                                    );
+                                                if (edited != null) {
+                                                  await ctrl.upsertItem(
+                                                    item: edited,
+                                                    ent: ent,
+                                                  );
+                                                }
+                                              } else if (v == 'del') {
+                                                final ok = await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (_) => AlertDialog(
+                                                    title: const Text(
+                                                      'Eliminar ítem',
                                                     ),
-                                              ),
-                                            );
-                                        if (edited != null) {
-                                          await ctrl.upsertItem(
-                                            item: edited,
-                                            ent: ent,
-                                          );
-                                        }
-                                      } else if (v == 'del') {
-                                        final ok = await showDialog<bool>(
-                                          context: context,
-                                          builder: (_) => AlertDialog(
-                                            title: const Text('Eliminar ítem'),
-                                            content: Text(
-                                              '¿Eliminar "${item.name}"?',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(
-                                                  context,
-                                                  false,
-                                                ),
-                                                child: const Text('Cancelar'),
-                                              ),
-                                              FilledButton(
-                                                onPressed: () => Navigator.pop(
-                                                  context,
-                                                  true,
-                                                ),
-                                                child: const Text('Eliminar'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                        if (ok == true) {
-                                          await ctrl.deleteItem(
-                                            itemId: item.id,
-                                            ent: ent,
-                                          );
-                                        }
-                                      }
-                                    },
-                                    itemBuilder: (_) {
-                                      if (isService) {
-                                        return const [
-                                          PopupMenuItem(
-                                            value: 'edit',
-                                            child: Text('Editar'),
-                                          ),
-                                          PopupMenuItem(
-                                            value: 'del',
-                                            child: Text('Eliminar'),
-                                          ),
-                                        ];
-                                      }
+                                                    content: Text(
+                                                      '¿Eliminar "${item.name}"?',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              context,
+                                                              false,
+                                                            ),
+                                                        child: const Text(
+                                                          'Cancelar',
+                                                        ),
+                                                      ),
+                                                      FilledButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              context,
+                                                              true,
+                                                            ),
+                                                        child: const Text(
+                                                          'Eliminar',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (ok == true) {
+                                                  await ctrl.deleteItem(
+                                                    itemId: item.id,
+                                                    ent: ent,
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            itemBuilder: (_) {
+                                              if (isService) {
+                                                return const [
+                                                  PopupMenuItem(
+                                                    value: 'edit',
+                                                    child: Text('Editar'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 'del',
+                                                    child: Text('Eliminar'),
+                                                  ),
+                                                ];
+                                              }
 
-                                      return [
-                                        const PopupMenuItem(
-                                          value: 'restock',
-                                          child: Text('Actualizar stock'),
-                                        ),
-                                        if (proCloud)
-                                          const PopupMenuItem(
-                                            value: 'purchase',
-                                            child: Text(
-                                              'Compra / reposición (PRO)',
-                                            ),
-                                          ),
-                                        const PopupMenuDivider(),
-                                        const PopupMenuItem(
-                                          value: 'out',
-                                          child: Text('Salida (-)'),
-                                        ),
-                                        const PopupMenuDivider(),
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text('Editar'),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'del',
-                                          child: Text('Eliminar'),
-                                        ),
-                                      ];
-                                    },
+                                              return [
+                                                const PopupMenuItem(
+                                                  value: 'restock',
+                                                  child: Text(
+                                                    'Actualizar stock',
+                                                  ),
+                                                ),
+                                                if (proCloud)
+                                                  const PopupMenuItem(
+                                                    value: 'purchase',
+                                                    child: Text(
+                                                      'Compra / reposición (PRO)',
+                                                    ),
+                                                  ),
+                                                const PopupMenuDivider(),
+                                                const PopupMenuItem(
+                                                  value: 'out',
+                                                  child: Text('Salida (-)'),
+                                                ),
+                                                const PopupMenuDivider(),
+                                                const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text('Editar'),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'del',
+                                                  child: Text('Eliminar'),
+                                                ),
+                                              ];
+                                            },
+                                          )
+                                        : null,
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final created = await Navigator.push<InventoryItem>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => InventoryItemFormPage(
-                proCloud: isPro, // ✅ SOLO PRO (SKU + margen)
-              ),
-            ),
-          );
-          if (created != null) {
-            await ctrl.upsertItem(item: created, ent: ent);
-          }
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Ítem'),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+        floatingActionButton: canEditInventory
+            ? FloatingActionButton.extended(
+                onPressed: () async {
+                  final created = await Navigator.push<InventoryItem>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => InventoryItemFormPage(
+                        proCloud: isPro, // ✅ SOLO PRO (SKU + margen)
+                      ),
+                    ),
+                  );
+                  if (created != null) {
+                    await ctrl.upsertItem(item: created, ent: ent);
+                  }
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Ítem'),
+              )
+            : null,
       ),
     );
   }

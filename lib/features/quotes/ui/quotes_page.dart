@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 
 import '../domain/quote.dart';
 import '../domain/quote_status.dart';
@@ -15,21 +16,25 @@ class QuotesPage extends ConsumerWidget {
     final async = ref.watch(quotesControllerProvider);
     final ctrl = ref.read(quotesControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Cotizaciones')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final q = await ctrl.newDraft(); // ✅ newDraft() es Future<Quote>
-          if (!context.mounted) return;
-          _openEditor(context, q);
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva'),
-      ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (state) => _Body(state: state, ctrl: ctrl),
+    return ModulePermissionGuard(
+      moduleKey: 'quotes',
+      moduleLabel: 'Cotizaciones',
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Cotizaciones')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () async {
+            final q = await ctrl.newDraft(); // ✅ newDraft() es Future<Quote>
+            if (!context.mounted) return;
+            _openEditor(context, q);
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('Nueva'),
+        ),
+        body: async.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (state) => _Body(state: state, ctrl: ctrl),
+        ),
       ),
     );
   }
@@ -146,7 +151,9 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = status == null ? scheme.primary : _statusColor(status!, scheme);
+    final color = status == null
+        ? scheme.primary
+        : _statusColor(status!, scheme);
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -170,11 +177,11 @@ class _FilterChip extends StatelessWidget {
   }
 
   Color _statusColor(QuoteStatus s, ColorScheme scheme) => switch (s) {
-        QuoteStatus.draft => Colors.blueGrey,
-        QuoteStatus.sent => scheme.primary,
-        QuoteStatus.accepted => Colors.green.shade700,
-        QuoteStatus.cancelled => Colors.redAccent,
-      };
+    QuoteStatus.draft => Colors.blueGrey,
+    QuoteStatus.sent => scheme.primary,
+    QuoteStatus.accepted => Colors.green.shade700,
+    QuoteStatus.cancelled => Colors.redAccent,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +296,10 @@ class _QuoteCard extends ConsumerWidget {
                         if (ok == true) await ctrl.delete(quote.id);
                       }
                       if (v == 'duplicate') {
-                        final dup = await ctrl.duplicate(quote, mode: 'duplicate');
+                        final dup = await ctrl.duplicate(
+                          quote,
+                          mode: 'duplicate',
+                        );
                         if (!context.mounted) return;
                         Navigator.of(context).push(
                           MaterialPageRoute(

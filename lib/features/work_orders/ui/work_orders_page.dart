@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/work_order.dart';
@@ -15,23 +16,27 @@ class WorkOrdersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(workOrdersControllerProvider);
-    final ctrl  = ref.read(workOrdersControllerProvider.notifier);
+    final ctrl = ref.read(workOrdersControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Órdenes de trabajo')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => WorkOrderEditorPage(order: ctrl.newOrder()),
+    return ModulePermissionGuard(
+      moduleKey: 'workOrders',
+      moduleLabel: 'Órdenes de trabajo',
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Órdenes de trabajo')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => WorkOrderEditorPage(order: ctrl.newOrder()),
+            ),
           ),
+          icon: const Icon(Icons.add),
+          label: const Text('Nueva OT'),
         ),
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva OT'),
-      ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error:   (e, _) => Center(child: Text('Error: $e')),
-        data:    (state) => _Body(state: state, ctrl: ctrl),
+        body: async.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (state) => _Body(state: state, ctrl: ctrl),
+        ),
       ),
     );
   }
@@ -107,8 +112,10 @@ class _Body extends ConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   itemCount: orders.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => _OrderCard(order: orders[i], ctrl: ctrl),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 10),
+                  itemBuilder: (_, i) =>
+                      _OrderCard(order: orders[i], ctrl: ctrl),
                 ),
         ),
       ],
@@ -169,9 +176,7 @@ class _OrderCard extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => WorkOrderEditorPage(order: order),
-          ),
+          MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: order)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -249,7 +254,9 @@ class _OrderCard extends ConsumerWidget {
                           value: order.progress,
                           minHeight: 6,
                           backgroundColor: AppColors.border,
-                          valueColor: AlwaysStoppedAnimation(order.status.color),
+                          valueColor: AlwaysStoppedAnimation(
+                            order.status.color,
+                          ),
                         ),
                       ),
                     ),
@@ -264,20 +271,27 @@ class _OrderCard extends ConsumerWidget {
               Builder(
                 builder: (context) {
                   final now = DateTime.now();
-                  final isLate = order.deliveryAtMs != null &&
-                      DateTime.fromMillisecondsSinceEpoch(order.deliveryAtMs!)
-                          .isBefore(now) &&
+                  final isLate =
+                      order.deliveryAtMs != null &&
+                      DateTime.fromMillisecondsSinceEpoch(
+                        order.deliveryAtMs!,
+                      ).isBefore(now) &&
                       order.status != WorkOrderStatus.done &&
                       order.status != WorkOrderStatus.delivered;
                   if (!isLate) return const SizedBox(height: 8);
-                  final d = DateTime.fromMillisecondsSinceEpoch(order.deliveryAtMs!);
+                  final d = DateTime.fromMillisecondsSinceEpoch(
+                    order.deliveryAtMs!,
+                  );
                   final days = now.difference(d).inDays;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.red.shade50,
                           borderRadius: BorderRadius.circular(8),
@@ -313,7 +327,11 @@ class _OrderCard extends ConsumerWidget {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () async {
-                                await _showRescheduleDialog(context, ctrl, order);
+                                await _showRescheduleDialog(
+                                  context,
+                                  ctrl,
+                                  order,
+                                );
                               },
                               child: const Text(
                                 'Reprogramar',
@@ -451,7 +469,8 @@ Future<void> _showRescheduleDialog(
   final dateStr = '$day/$month/${picked.year}';
 
   final msgCtrl = TextEditingController(
-    text: 'Estimado cliente, le informamos que su orden de trabajo '
+    text:
+        'Estimado cliente, le informamos que su orden de trabajo '
         '${order.quoteTitle != null ? '"${order.quoteTitle}" ' : ''}'
         'ha sido reprogramada para el $dateStr. '
         'Disculpe los inconvenientes.',
@@ -511,9 +530,7 @@ Future<void> _showRescheduleDialog(
 
   if (action == null || action == 'cancel' || !context.mounted) return;
 
-  final updated = order.copyWith(
-    deliveryAtMs: picked.millisecondsSinceEpoch,
-  );
+  final updated = order.copyWith(deliveryAtMs: picked.millisecondsSinceEpoch);
 
   await ctrl.upsert(updated);
 
@@ -534,7 +551,9 @@ Future<void> _showRescheduleDialog(
   if (!hasPhone) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No se pudo abrir WhatsApp porque la OT no tiene teléfono.'),
+        content: Text(
+          'No se pudo abrir WhatsApp porque la OT no tiene teléfono.',
+        ),
       ),
     );
     return;

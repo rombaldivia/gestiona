@@ -20,13 +20,25 @@ service cloud.firestore {
         companyDoc(companyId).data.ownerUid == request.auth.uid;
     }
 
-    function isMemberSub(companyId) {
+    function memberExists(companyId) {
       return signedIn() &&
         exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
     }
 
+    function memberDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+
     function isMember(companyId) {
-      return isOwner(companyId) || isMemberSub(companyId);
+      return isOwner(companyId) || memberExists(companyId);
+    }
+
+    function companyIsPro(companyId) {
+      return companyExists(companyId) &&
+        (
+          companyDoc(companyId).data.plan == 'pro' ||
+          companyDoc(companyId).data.subscriptionPlan == 'pro'
+        );
     }
 
     function joinCodeDoc(code) {
@@ -50,6 +62,26 @@ service cloud.firestore {
         );
     }
 
+    function moduleAccess(companyId, key) {
+      return memberExists(companyId)
+        ? memberDoc(companyId).data.permissions[key]
+        : 'none';
+    }
+
+    function canViewModule(companyId, key) {
+      return isOwner(companyId) ||
+        (memberExists(companyId) &&
+          (
+            moduleAccess(companyId, key) == 'view' ||
+            moduleAccess(companyId, key) == 'edit'
+          ));
+    }
+
+    function canEditModule(companyId, key) {
+      return isOwner(companyId) ||
+        (memberExists(companyId) && moduleAccess(companyId, key) == 'edit');
+    }
+
     match /users/{uid} {
       allow create, update: if signedIn() && request.auth.uid == uid;
       allow read: if signedIn() && request.auth.uid == uid;
@@ -58,6 +90,9 @@ service cloud.firestore {
 
     match /companies/{companyId} {
       allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+
+      // Cualquier miembro puede leer metadata básica de su empresa;
+      // owner puede actualizar/borrar
       allow read: if signedIn() && isMember(companyId);
       allow update, delete: if signedIn() && isOwner(companyId);
 
@@ -66,32 +101,57 @@ service cloud.firestore {
       }
 
       match /members/{uid} {
-        allow read: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
+        allow read: if signedIn() && (
+          isOwner(companyId) ||
+          request.auth.uid == uid
+        );
 
+        // Alta por QR
         allow create: if signedIn()
           && request.auth.uid == uid
           && request.resource.data.uid == request.auth.uid
+          && request.resource.data.companyId == companyId
+          && request.resource.data.companyName is string
+          && request.resource.data.name is string
+          && request.resource.data.email is string
+          && request.resource.data.role is string
+          && request.resource.data.joinedAtMs is int
+          && request.resource.data.isAnonymous is bool
           && request.resource.data.joinCode is string
-          && validJoinCodeForCompany(request.resource.data.joinCode, companyId);
+          && (!('permissions' in request.resource.data) || request.resource.data.permissions is map)
+          && validJoinCodeForCompany(request.resource.data.joinCode, companyId)
+          && companyIsPro(companyId);
 
-        allow update: if signedIn() && (isOwner(companyId) || request.auth.uid == uid);
+        // Solo owner edita rol, nombre, email y permisos
+        allow update: if signedIn() && isOwner(companyId);
+
+        // Solo owner elimina; al borrar el doc, pierde acceso al instante
         allow delete: if signedIn() && isOwner(companyId);
       }
 
       match /inventory_items/{docId} {
-        allow read, write: if signedIn() && isMember(companyId);
+        allow read: if signedIn() && canViewModule(companyId, 'inventory');
+        allow create, update, delete: if signedIn() && canEditModule(companyId, 'inventory');
       }
 
       match /stock_movements/{docId} {
-        allow read, write: if signedIn() && isMember(companyId);
+        allow read: if signedIn() && canViewModule(companyId, 'inventory');
+        allow create, update, delete: if signedIn() && canEditModule(companyId, 'inventory');
       }
 
       match /work_orders/{workOrderId} {
-        allow read, write: if signedIn() && isMember(companyId);
+        allow read: if signedIn() && canViewModule(companyId, 'workOrders');
+        allow create, update, delete: if signedIn() && canEditModule(companyId, 'workOrders');
       }
 
       match /quotes/{quoteId} {
-        allow read, write: if signedIn() && isMember(companyId);
+        allow read: if signedIn() && canViewModule(companyId, 'quotes');
+        allow create, update, delete: if signedIn() && canEditModule(companyId, 'quotes');
+      }
+
+      match /sales/{saleId} {
+        allow read: if signedIn() && canViewModule(companyId, 'sales');
+        allow create, update, delete: if signedIn() && canEditModule(companyId, 'sales');
       }
     }
 

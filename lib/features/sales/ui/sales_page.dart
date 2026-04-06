@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/sale.dart';
@@ -13,9 +14,9 @@ class SalesPage extends ConsumerWidget {
   Future<void> _newSale(BuildContext context, WidgetRef ref) async {
     final draft = await ref.read(salesControllerProvider.notifier).newDraft();
     if (!context.mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SaleEditorPage(sale: draft)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SaleEditorPage(sale: draft)));
   }
 
   @override
@@ -23,98 +24,119 @@ class SalesPage extends ConsumerWidget {
     final asyncState = ref.watch(salesControllerProvider);
 
     return asyncState.when(
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Ventas')),
-        body: const Center(child: CircularProgressIndicator()),
+      loading: () => ModulePermissionGuard(
+        moduleKey: 'sales',
+        moduleLabel: 'Ventas',
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Ventas')),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
       ),
-      error: (e, _) => Scaffold(
-        appBar: AppBar(title: const Text('Ventas')),
-        body: Center(child: Text('Error: $e')),
+      error: (e, _) => ModulePermissionGuard(
+        moduleKey: 'sales',
+        moduleLabel: 'Ventas',
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Ventas')),
+          body: Center(child: Text('Error: $e')),
+        ),
       ),
       data: (state) {
         final sales = state.visible;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Ventas'),
-            actions: [
-              IconButton(
-                tooltip: 'Nueva venta',
-                onPressed: () => _newSale(context, ref),
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-              ),
-            ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _newSale(context, ref),
-            icon: const Icon(Icons.add),
-            label: const Text('Nueva venta'),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-            children: [
-              TextField(
-                onChanged: ref.read(salesControllerProvider.notifier).setQuery,
-                decoration: const InputDecoration(
-                  hintText: 'Buscar por cliente, NIT/CI o número...',
-                  prefixIcon: Icon(Icons.search),
+        return ModulePermissionGuard(
+          moduleKey: 'sales',
+          moduleLabel: 'Ventas',
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Ventas'),
+              actions: [
+                IconButton(
+                  tooltip: 'Nueva venta',
+                  onPressed: () => _newSale(context, ref),
+                  icon: const Icon(Icons.add_shopping_cart_rounded),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _FilterChip(
-                    label: 'Todas',
-                    selected: state.filterStatus == null,
-                    onTap: () => ref.read(salesControllerProvider.notifier).setFilter(null),
+              ],
+            ),
+            floatingActionButton: FloatingActionButton.extended(
+              onPressed: () => _newSale(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva venta'),
+            ),
+            body: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              children: [
+                TextField(
+                  onChanged: ref
+                      .read(salesControllerProvider.notifier)
+                      .setQuery,
+                  decoration: const InputDecoration(
+                    hintText: 'Buscar por cliente, NIT/CI o número...',
+                    prefixIcon: Icon(Icons.search),
                   ),
-                  for (final status in SaleStatus.values)
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
                     _FilterChip(
-                      label: status.label,
-                      selected: state.filterStatus == status,
-                      onTap: () => ref.read(salesControllerProvider.notifier).setFilter(status),
+                      label: 'Todas',
+                      selected: state.filterStatus == null,
+                      onTap: () => ref
+                          .read(salesControllerProvider.notifier)
+                          .setFilter(null),
                     ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (sales.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.point_of_sale_rounded, size: 44),
-                      const SizedBox(height: 10),
-                      Text('Todavía no hay ventas', style: AppTextStyles.title),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Crea tu primera venta desde aquí.',
-                        style: AppTextStyles.body,
-                        textAlign: TextAlign.center,
+                    for (final status in SaleStatus.values)
+                      _FilterChip(
+                        label: status.label,
+                        selected: state.filterStatus == status,
+                        onTap: () => ref
+                            .read(salesControllerProvider.notifier)
+                            .setFilter(status),
                       ),
-                      const SizedBox(height: 14),
-                      FilledButton.icon(
-                        onPressed: () => _newSale(context, ref),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Nueva venta'),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                ...sales.map(
-                  (sale) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _SaleCard(sale: sale),
-                  ),
+                  ],
                 ),
-            ],
+                const SizedBox(height: 16),
+                if (sales.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.point_of_sale_rounded, size: 44),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Todavía no hay ventas',
+                          style: AppTextStyles.title,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Crea tu primera venta desde aquí.',
+                          style: AppTextStyles.body,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: () => _newSale(context, ref),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Nueva venta'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...sales.map(
+                    (sale) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _SaleCard(sale: sale),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -134,9 +156,9 @@ class _SaleCard extends ConsumerWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.lg),
       onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => SaleEditorPage(sale: sale)),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => SaleEditorPage(sale: sale)));
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -155,14 +177,20 @@ class _SaleCard extends ConsumerWidget {
                 color: AppColors.primarySoft,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: const Icon(Icons.receipt_long_outlined, color: AppColors.primary),
+              child: const Icon(
+                Icons.receipt_long_outlined,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(sale.numberLabel, style: AppTextStyles.title.copyWith(fontSize: 15)),
+                  Text(
+                    sale.numberLabel,
+                    style: AppTextStyles.title.copyWith(fontSize: 15),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     sale.customerNameOrBusinessName?.trim().isNotEmpty == true
@@ -173,11 +201,11 @@ class _SaleCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Text(
                     [
-                      if ((sale.documentType?.label ?? '').isNotEmpty)
-                        sale.documentType!.label,
-                      if ((sale.documentNumber ?? '').trim().isNotEmpty)
-                        sale.documentNumber!.trim(),
-                    ].join(' · ').isEmpty
+                          if ((sale.documentType?.label ?? '').isNotEmpty)
+                            sale.documentType!.label,
+                          if ((sale.documentNumber ?? '').trim().isNotEmpty)
+                            sale.documentNumber!.trim(),
+                        ].join(' · ').isEmpty
                         ? 'Sin documento'
                         : [
                             if ((sale.documentType?.label ?? '').isNotEmpty)

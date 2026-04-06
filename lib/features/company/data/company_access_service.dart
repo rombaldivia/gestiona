@@ -72,6 +72,55 @@ class CompanyAccessService {
         });
   }
 
+  Future<void> updateMemberRole({
+    required String companyId,
+    required String memberUid,
+    required String role,
+  }) async {
+    if (!companyJoinRoles.contains(role)) {
+      throw ArgumentError('Rol inválido: $role');
+    }
+
+    await _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('members')
+        .doc(memberUid)
+        .set({
+          'role': role,
+          'permissions': permissionsForRole(role).toJson(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  Future<void> updateMemberPermissions({
+    required String companyId,
+    required String memberUid,
+    required MemberModulePermissions permissions,
+  }) async {
+    await _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('members')
+        .doc(memberUid)
+        .set({
+          'permissions': permissions.toJson(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  Future<void> removeMember({
+    required String companyId,
+    required String memberUid,
+  }) async {
+    await _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('members')
+        .doc(memberUid)
+        .delete();
+  }
+
   Future<JoinCodeData?> getActiveJoinCode({required String companyId}) async {
     final accessSnap = await _db
         .collection('companies')
@@ -158,7 +207,10 @@ class CompanyAccessService {
     );
   }
 
-  Future<JoinCodeData> joinWithCode(String rawCode) async {
+  Future<JoinCodeData> joinWithCode(
+    String rawCode, {
+    String? preferredName,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw StateError('Debes iniciar sesión antes de unirte.');
@@ -191,7 +243,9 @@ class CompanyAccessService {
         .doc(uid);
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final name = _bestUserName(user);
+    final name = (preferredName ?? '').trim().isNotEmpty
+        ? preferredName!.trim()
+        : _bestUserName(user);
     final email = (user.email ?? '').trim();
 
     if (!isOwner) {
@@ -207,6 +261,7 @@ class CompanyAccessService {
           'companyId': joinData.companyId,
           'companyName': resolvedCompanyName,
           'isAnonymous': user.isAnonymous,
+          'permissions': permissionsForRole(joinData.role).toJson(),
         },
         'escribiendo companies/${joinData.companyId}/members/$uid',
         merge: true,
@@ -320,6 +375,6 @@ class CompanyAccessService {
     if (email.isNotEmpty && email.contains('@')) {
       return email.split('@').first;
     }
-    return 'Usuario';
+    return 'Usuario temporal';
   }
 }
