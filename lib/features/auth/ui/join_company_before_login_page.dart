@@ -68,6 +68,42 @@ class _JoinCompanyBeforeLoginPageState
     setState(() {});
   }
 
+  Future<String?> _askNameIfNeeded() async {
+    final current = FirebaseAuth.instance.currentUser;
+    final currentName = (current?.displayName ?? '').trim();
+    if (currentName.isNotEmpty) return currentName;
+
+    final c = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Tu nombre'),
+        content: TextField(
+          controller: c,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Nombre',
+            hintText: 'Ej: Juan Pérez',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, c.text.trim()),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+
+    final name = (result ?? '').trim();
+    if (name.isEmpty) return null;
+    return name;
+  }
+
   Future<void> _continueJoin() async {
     final code = _controller.text.trim();
     if (code.isEmpty) {
@@ -85,7 +121,17 @@ class _JoinCompanyBeforeLoginPageState
         await widget.auth.signInAnonymously();
       }
 
-      final joined = await _service.joinWithCode(code);
+      final preferredName = await _askNameIfNeeded();
+      if (!mounted) return;
+      if (preferredName == null) {
+        setState(() => _busy = false);
+        return;
+      }
+
+      final joined = await _service.joinWithCode(
+        code,
+        preferredName: preferredName,
+      );
       await _store.clear();
 
       final uid = FirebaseAuth.instance.currentUser?.uid;

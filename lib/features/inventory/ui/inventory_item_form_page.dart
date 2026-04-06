@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 import 'package:http/http.dart' as http;
 
 import '../../subscription/domain/plan_tier.dart';
@@ -480,330 +481,24 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
     final showUsdProtector =
         _effectivePro && _kind != InventoryItemKind.servicio;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) { if (!didPop) _save(); },
-      child: Scaffold(
-      appBar: AppBar(
-        title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
-        leading: BackButton(onPressed: _save),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // DEBUG
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            child: Text(
-              'DEBUG: effectivePro=$_effectivePro | kind=${_kind.label} | costCurrency=$_costCurrency | usdRate=${_usdRate?.toStringAsFixed(2) ?? "null"} | source=$_usdRateSource | protectMargin=$_protectMargin',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+    return ModulePermissionGuard(
+      moduleKey: 'inventory',
+      moduleLabel: 'Inventario',
+      requireEdit: true,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _save();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(editing ? 'Editar ítem' : 'Nuevo ítem'),
+            leading: BackButton(onPressed: _save),
           ),
-          const SizedBox(height: 12),
-
-          InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'Tipo',
-              border: OutlineInputBorder(),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<InventoryItemKind>(
-                value: _kind,
-                isExpanded: true,
-                items: InventoryItemKind.values
-                    .map(
-                      (k) => DropdownMenuItem(value: k, child: Text(k.label)),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  _setKind(v);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'Nombre'),
-          ),
-          const SizedBox(height: 12),
-
-          Row(
+          body: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              const Expanded(
-                child: Text(
-                  'SKU',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Row(
-                children: [
-                  Text(_effectivePro ? 'Usar SKU' : 'Usar SKU (PRO)'),
-                  const SizedBox(width: 8),
-                  Switch(
-                    value: _useSku,
-                    onChanged: _effectivePro
-                        ? (v) {
-                            setState(() => _useSku = v);
-                            if (!v) _sku.clear();
-                          }
-                        : null,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (_useSku && _effectivePro) ...[
-            TextField(
-              controller: _sku,
-              decoration: const InputDecoration(labelText: 'SKU del ítem'),
-            ),
-            const SizedBox(height: 12),
-          ] else ...[
-            const SizedBox(height: 12),
-          ],
-
-          if (_supportsStock) ...[
-            TextField(
-              controller: _unit,
-              decoration: const InputDecoration(
-                labelText: 'Unidad (opcional)',
-                hintText: 'u, kg, m...',
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          if (_kind == InventoryItemKind.servicio) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Cobro',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Row(
-                  children: [
-                    const Text('Por hora'),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: _serviceHourly,
-                      onChanged: (v) => setState(() => _serviceHourly = v),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          if (_kind != InventoryItemKind.servicio) ...[
-            if (_effectivePro) ...[
-              InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Moneda del costo (PRO)',
-                  border: OutlineInputBorder(),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _costCurrency,
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(value: 'bob', child: Text('Bs')),
-                      DropdownMenuItem(value: 'usd', child: Text('USD')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _costCurrency = v);
-                      _onCostChanged();
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ],
-
-          TextField(
-            controller: _price,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(labelText: _priceLabel),
-          ),
-          const SizedBox(height: 12),
-
-          if (_kind != InventoryItemKind.servicio) ...[
-
-            if (!_effectivePro || _costCurrency == 'bob') ...[
-              TextField(
-                controller: _costBob,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Costo (Bs) (opcional)',
-                ),
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              TextField(
-                controller: _costUsd,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Costo (USD) (PRO)',
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ],
-
-          if (_supportsMargin) ...[
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Margen',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      _effectivePro
-                          ? 'Calcular margen'
-                          : 'Calcular margen (PRO)',
-                    ),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: _calcMargin,
-                      onChanged: _effectivePro
-                          ? (v) {
-                              setState(() => _calcMargin = v);
-                              if (!v) _markup.clear();
-                              if (v) _onPriceChanged();
-                            }
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            if (_calcMargin && _effectivePro) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _markup,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: '% margen',
-                  suffixText: '%',
-                ),
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              const SizedBox(height: 12),
-            ],
-          ],
-
-
-          if (showUsdProtector) ...[
-            const Divider(),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'USD Protector (PRO)',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _fetchingRate
-                      ? null
-                      : () => _fetchBinanceRate(applyProtector: true),
-                  icon: _fetchingRate
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.cloud_download),
-                  label: const Text('Traer Binance'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            TextField(
-              controller: _usdRateManual,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Tasa USD→Bs (manual)',
-                hintText: 'Ej: 9.21',
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Text(
-              _usdRate == null
-                  ? 'Tasa activa: (vacío)'
-                  : 'Tasa activa: ${_usdRate!.toStringAsFixed(2)} Bs/USD',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _usdRateAt == null
-                  ? 'Fuente: $_usdRateSource'
-                  : 'Fuente: $_usdRateSource • ${_usdRateAt!.toLocal()}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Mantener margen si cambia el dólar',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Switch(
-                  value: _protectMargin,
-                  onChanged: (v) {
-                    setState(() {
-                      _protectMargin = v;
-                      if (v && _usdRate != null) {
-                        _protectedUsdRateAtSave ??= _usdRate;
-                      }
-                      if (!v) _protectedUsdRateAtSave = null;
-                    });
-                  },
-                ),
-              ],
-            ),
-            if (_protectMargin) ...[
-              Text(
-                _protectedUsdRateAtSave == null
-                    ? 'Protección activa (falta fijar tasa base)'
-                    : 'Tasa base fijada: ${_protectedUsdRateAtSave!.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            if (convertedBob != null) ...[
+              // DEBUG
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -813,28 +508,342 @@ class _InventoryItemFormPageState extends State<InventoryItemFormPage> {
                   ),
                 ),
                 child: Text(
-                  'Costo convertido (Bs): ${_fmtMoney(convertedBob)}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  'DEBUG: effectivePro=$_effectivePro | kind=${_kind.label} | costCurrency=$_costCurrency | usdRate=${_usdRate?.toStringAsFixed(2) ?? "null"} | source=$_usdRateSource | protectMargin=$_protectMargin',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
               const SizedBox(height: 12),
-            ],
-          ],
 
-          if (_supportsStock) ...[
-            TextField(
-              controller: _min,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Tipo',
+                  border: OutlineInputBorder(),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<InventoryItemKind>(
+                    value: _kind,
+                    isExpanded: true,
+                    items: InventoryItemKind.values
+                        .map(
+                          (k) =>
+                              DropdownMenuItem(value: k, child: Text(k.label)),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      _setKind(v);
+                    },
+                  ),
+                ),
               ),
-              decoration: const InputDecoration(
-                labelText: 'Stock mínimo (alerta)',
+              const SizedBox(height: 12),
+
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Nombre'),
               ),
-            ),
-          ],
-        ],
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'SKU',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Text(_effectivePro ? 'Usar SKU' : 'Usar SKU (PRO)'),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: _useSku,
+                        onChanged: _effectivePro
+                            ? (v) {
+                                setState(() => _useSku = v);
+                                if (!v) _sku.clear();
+                              }
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (_useSku && _effectivePro) ...[
+                TextField(
+                  controller: _sku,
+                  decoration: const InputDecoration(labelText: 'SKU del ítem'),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                const SizedBox(height: 12),
+              ],
+
+              if (_supportsStock) ...[
+                TextField(
+                  controller: _unit,
+                  decoration: const InputDecoration(
+                    labelText: 'Unidad (opcional)',
+                    hintText: 'u, kg, m...',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              if (_kind == InventoryItemKind.servicio) ...[
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Cobro',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Text('Por hora'),
+                        const SizedBox(width: 8),
+                        Switch(
+                          value: _serviceHourly,
+                          onChanged: (v) => setState(() => _serviceHourly = v),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              if (_kind != InventoryItemKind.servicio) ...[
+                if (_effectivePro) ...[
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Moneda del costo (PRO)',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _costCurrency,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(value: 'bob', child: Text('Bs')),
+                          DropdownMenuItem(value: 'usd', child: Text('USD')),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _costCurrency = v);
+                          _onCostChanged();
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+
+              TextField(
+                controller: _price,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(labelText: _priceLabel),
+              ),
+              const SizedBox(height: 12),
+
+              if (_kind != InventoryItemKind.servicio) ...[
+                if (!_effectivePro || _costCurrency == 'bob') ...[
+                  TextField(
+                    controller: _costBob,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Costo (Bs) (opcional)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  TextField(
+                    controller: _costUsd,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Costo (USD) (PRO)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+
+              if (_supportsMargin) ...[
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Margen',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          _effectivePro
+                              ? 'Calcular margen'
+                              : 'Calcular margen (PRO)',
+                        ),
+                        const SizedBox(width: 8),
+                        Switch(
+                          value: _calcMargin,
+                          onChanged: _effectivePro
+                              ? (v) {
+                                  setState(() => _calcMargin = v);
+                                  if (!v) _markup.clear();
+                                  if (v) _onPriceChanged();
+                                }
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (_calcMargin && _effectivePro) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _markup,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: '% margen',
+                      suffixText: '%',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  const SizedBox(height: 12),
+                ],
+              ],
+
+              if (showUsdProtector) ...[
+                const Divider(),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'USD Protector (PRO)',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _fetchingRate
+                          ? null
+                          : () => _fetchBinanceRate(applyProtector: true),
+                      icon: _fetchingRate
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.cloud_download),
+                      label: const Text('Traer Binance'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                TextField(
+                  controller: _usdRateManual,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Tasa USD→Bs (manual)',
+                    hintText: 'Ej: 9.21',
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                Text(
+                  _usdRate == null
+                      ? 'Tasa activa: (vacío)'
+                      : 'Tasa activa: ${_usdRate!.toStringAsFixed(2)} Bs/USD',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _usdRateAt == null
+                      ? 'Fuente: $_usdRateSource'
+                      : 'Fuente: $_usdRateSource • ${_usdRateAt!.toLocal()}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Mantener margen si cambia el dólar',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Switch(
+                      value: _protectMargin,
+                      onChanged: (v) {
+                        setState(() {
+                          _protectMargin = v;
+                          if (v && _usdRate != null) {
+                            _protectedUsdRateAtSave ??= _usdRate;
+                          }
+                          if (!v) _protectedUsdRateAtSave = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                if (_protectMargin) ...[
+                  Text(
+                    _protectedUsdRateAtSave == null
+                        ? 'Protección activa (falta fijar tasa base)'
+                        : 'Tasa base fijada: ${_protectedUsdRateAtSave!.toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                if (convertedBob != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Text(
+                      'Costo convertido (Bs): ${_fmtMoney(convertedBob)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+
+              if (_supportsStock) ...[
+                TextField(
+                  controller: _min,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Stock mínimo (alerta)',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-    ),
     );
   }
 }

@@ -1,15 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../subscription/presentation/entitlements_providers.dart';
 import '../data/company_access_service.dart';
 import '../domain/company_member.dart';
-import '../presentation/company_scope.dart';
 import '../presentation/company_providers.dart';
-import '../../subscription/presentation/entitlements_providers.dart';
+import '../presentation/company_scope.dart';
 import 'qr_join_scanner_page.dart';
 
 class TeamAccessPage extends ConsumerStatefulWidget {
@@ -40,77 +40,45 @@ class _TeamAccessPageState extends ConsumerState<TeamAccessPage> {
     });
   }
 
+  Future<void> _bootstrap() async {
+    final scope = CompanyScope.of(context);
+    final companyId = scope.companyId;
+    final companyName = scope.companyName;
+
+    final isOwner = await _service.isCurrentUserOwner(companyId);
+    final activeCode = isOwner
+        ? await _service.getActiveJoinCode(companyId: companyId)
+        : null;
+
+    if (!mounted) return;
+    setState(() {
+      _companyId = companyId;
+      _companyName = companyName;
+      _isOwner = isOwner;
+      _activeCode = activeCode;
+      _selectedRole = activeCode?.role ?? companyJoinRoles.last;
+      _loadingOwner = false;
+    });
+  }
+
   @override
   void dispose() {
     _joinCodeController.dispose();
     super.dispose();
   }
 
-  Future<void> _bootstrap() async {
-    final company = CompanyScope.maybeOf(context);
-
-    if (company == null) {
-      if (!mounted) return;
-      setState(() {
-        _companyId = null;
-        _companyName = null;
-        _loadingOwner = false;
-        _isOwner = false;
-        _activeCode = null;
-      });
-      return;
-    }
-
-    _companyId = company.companyId;
-    _companyName = company.companyName;
-    await _load();
-  }
-
-  Future<void> _load() async {
-    final companyId = _companyId;
-    if (companyId == null) return;
-
-    try {
-      final isOwner = await _service.isCurrentUserOwner(companyId);
-      JoinCodeData? code;
-      if (isOwner) {
-        code = await _service.getActiveJoinCode(companyId: companyId);
-      }
-      if (!mounted) return;
-      setState(() {
-        _isOwner = isOwner;
-        _activeCode = code;
-        if (code != null && companyJoinRoles.contains(code.role)) {
-          _selectedRole = code.role;
-        }
-        _loadingOwner = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingOwner = false;
-      });
-    }
-  }
-
   Future<void> _generateQr() async {
-    final companyId = _companyId;
-    final companyName = _companyName;
-
-    if (companyId == null || companyName == null) return;
+    if (_companyId == null || _companyName == null) return;
 
     setState(() => _busyGenerate = true);
     try {
       final code = await _service.createJoinCode(
-        companyId: companyId,
-        companyName: companyName,
+        companyId: _companyId!,
+        companyName: _companyName!,
         role: _selectedRole,
       );
       if (!mounted) return;
       setState(() => _activeCode = code);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('QR de acceso generado.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -140,13 +108,59 @@ class _TeamAccessPageState extends ConsumerState<TeamAccessPage> {
     await _joinCompany();
   }
 
+  Future<String?> _askNameIfNeeded() async {
+    final current = FirebaseAuth.instance.currentUser;
+    final currentName = (current?.displayName ?? '').trim();
+    if (currentName.isNotEmpty) return currentName;
+
+    final c = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Tu nombre'),
+        content: TextField(
+          controller: c,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Nombre',
+            hintText: 'Ej: Juan Pérez',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, c.text.trim()),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+
+    final name = (result ?? '').trim();
+    if (name.isEmpty) return null;
+    return name;
+  }
+
   Future<void> _joinCompany() async {
     final raw = _joinCodeController.text.trim();
     if (raw.isEmpty) return;
 
     setState(() => _busyJoin = true);
     try {
-      final joined = await _service.joinWithCode(raw);
+      final preferredName = await _askNameIfNeeded();
+      if (!mounted) return;
+      if (preferredName == null) {
+        setState(() => _busyJoin = false);
+        return;
+      }
+
+      final joined = await _service.joinWithCode(
+        raw,
+        preferredName: preferredName,
+      );
       if (!mounted) return;
       _joinCodeController.clear();
       ref.invalidate(companyControllerProvider);
@@ -169,6 +183,220 @@ class _TeamAccessPageState extends ConsumerState<TeamAccessPage> {
       );
     } finally {
       if (mounted) setState(() => _busyJoin = false);
+    }
+  }
+
+  Future<void> _changeRole(CompanyMember member) async {
+    if (_companyId == null) return;
+
+    String selected = member.role;
+
+    final role = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cambiar rol'),
+        content: StatefulBuilder(
+          builder: (context, setLocal) {
+            return DropdownButtonFormField<String>(
+              initialValue: selected,
+              items: companyJoinRoles
+                  .map(
+                    (r) => DropdownMenuItem(
+                      value: r,
+                      child: Text(companyRoleLabel(r)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v == null) return;
+                setLocal(() => selected = v);
+              },
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, selected),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (role == null) return;
+
+    try {
+      await _service.updateMemberRole(
+        companyId: _companyId!,
+        memberUid: member.uid,
+        role: role,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Rol actualizado.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar el rol: $e')),
+      );
+    }
+  }
+
+  Future<void> _editPermissions(CompanyMember member) async {
+    if (_companyId == null) return;
+
+    var perms = member.permissions;
+
+    final updated = await showDialog<MemberModulePermissions>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'Permisos de ${member.name.isEmpty ? member.uid : member.name}',
+        ),
+        content: SizedBox(
+          width: 380,
+          child: StatefulBuilder(
+            builder: (context, setLocal) {
+              Widget field(
+                String label,
+                String value,
+                void Function(String) onChanged,
+              ) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: DropdownButtonFormField<String>(
+                    initialValue: value,
+                    decoration: InputDecoration(labelText: label),
+                    items: moduleAccessLevels
+                        .map<DropdownMenuItem<String>>(
+                          (value) => DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(moduleAccessLabel(value)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setLocal(() => onChanged(v));
+                    },
+                  ),
+                );
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Dashboard siempre visible para cualquier miembro.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  field(
+                    'Cotizaciones',
+                    perms.quotes,
+                    (v) => perms = perms.copyWith(quotes: v),
+                  ),
+                  field(
+                    'OT',
+                    perms.workOrders,
+                    (v) => perms = perms.copyWith(workOrders: v),
+                  ),
+                  field(
+                    'Inventario',
+                    perms.inventory,
+                    (v) => perms = perms.copyWith(inventory: v),
+                  ),
+                  field(
+                    'Ventas',
+                    perms.sales,
+                    (v) => perms = perms.copyWith(sales: v),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, perms),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (updated == null) return;
+
+    try {
+      await _service.updateMemberPermissions(
+        companyId: _companyId!,
+        memberUid: member.uid,
+        permissions: updated,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Permisos actualizados.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudieron actualizar permisos: $e')),
+      );
+    }
+  }
+
+  Future<void> _removeMember(CompanyMember member) async {
+    if (_companyId == null) return;
+
+    final ok =
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Eliminar acceso'),
+            content: Text(
+              '¿Quitar a ${member.name.isEmpty ? member.uid : member.name} de la empresa?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!ok) return;
+
+    try {
+      await _service.removeMember(
+        companyId: _companyId!,
+        memberUid: member.uid,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Miembro eliminado.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar al miembro: $e')),
+      );
     }
   }
 
@@ -221,7 +449,13 @@ class _TeamAccessPageState extends ConsumerState<TeamAccessPage> {
               onGenerate: _generateQr,
             ),
             const SizedBox(height: 16),
-            _MembersCard(service: _service, companyId: _companyId!),
+            _MembersCard(
+              service: _service,
+              companyId: _companyId!,
+              onChangeRole: _changeRole,
+              onEditPermissions: _editPermissions,
+              onRemove: _removeMember,
+            ),
             const SizedBox(height: 16),
           ],
           _JoinCard(
@@ -253,18 +487,21 @@ class _InfoCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(icon, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Text(title, style: AppTextStyles.title),
-              ],
+            Icon(icon, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTextStyles.title),
+                  const SizedBox(height: 8),
+                  child,
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            child,
           ],
         ),
       ),
@@ -285,112 +522,53 @@ class _OwnerQrCard extends StatelessWidget {
   final JoinCodeData? activeCode;
   final bool busy;
   final ValueChanged<String?> onRoleChanged;
-  final VoidCallback onGenerate;
+  final Future<void> Function() onGenerate;
 
   @override
   Widget build(BuildContext context) {
+    final qrText = activeCode == null
+        ? null
+        : '{"code":"${activeCode!.code}","companyId":"${activeCode!.companyId}","role":"${activeCode!.role}"}';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.qr_code_2_rounded, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Text('Generar QR para empleados', style: AppTextStyles.title),
-              ],
-            ),
+            Text('Generar QR de acceso', style: AppTextStyles.title),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: selectedRole,
               items: companyJoinRoles
                   .map(
-                    (role) => DropdownMenuItem<String>(
+                    (role) => DropdownMenuItem(
                       value: role,
                       child: Text(companyRoleLabel(role)),
                     ),
                   )
                   .toList(),
               onChanged: busy ? null : onRoleChanged,
-              decoration: const InputDecoration(labelText: 'Rol del ingreso'),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: busy ? null : onGenerate,
-                icon: const Icon(Icons.refresh_rounded),
-                label: Text(busy ? 'Generando...' : 'Generar / renovar QR'),
+              decoration: const InputDecoration(
+                labelText: 'Rol del invitado',
+                prefixIcon: Icon(Icons.badge_outlined),
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'Cada renovación invalida el QR anterior.',
-              style: AppTextStyles.label,
+            FilledButton.icon(
+              onPressed: busy ? null : onGenerate,
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: Text(busy ? 'Generando...' : 'Generar / renovar QR'),
             ),
             if (activeCode != null) ...[
               const SizedBox(height: 16),
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: QrImageView(
-                    data: activeCode!.code,
-                    size: 220,
-                    backgroundColor: Colors.white,
-                  ),
-                ),
-              ),
+              Center(child: QrImageView(data: qrText!, size: 220)),
               const SizedBox(height: 12),
-              Center(
-                child: SelectableText(
-                  _formatCode(activeCode!.code),
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Chip(
-                    label: Text('Rol: ${companyRoleLabel(activeCode!.role)}'),
-                  ),
-                  if (activeCode!.expiresAt != null)
-                    Chip(
-                      label: Text(
-                        'Expira: ${_formatDateTime(activeCode!.expiresAt!)}',
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: activeCode!.code),
-                    );
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Código copiado.')),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('Copiar código'),
-                ),
+              SelectableText(activeCode!.code, style: AppTextStyles.title),
+              const SizedBox(height: 4),
+              Text(
+                'Rol: ${companyRoleLabel(activeCode!.role)}',
+                style: AppTextStyles.body,
               ),
             ],
           ],
@@ -398,92 +576,117 @@ class _OwnerQrCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatCode(String code) {
-    final chars = code.trim();
-    if (chars.length <= 4) return chars;
-    final parts = <String>[];
-    for (var i = 0; i < chars.length; i += 4) {
-      parts.add(
-        chars.substring(i, i + 4 > chars.length ? chars.length : i + 4),
-      );
-    }
-    return parts.join(' ');
-  }
-
-  String _formatDateTime(DateTime value) {
-    final day = value.day.toString().padLeft(2, '0');
-    final month = value.month.toString().padLeft(2, '0');
-    final year = value.year.toString();
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '$day/$month/$year $hour:$minute';
-  }
 }
 
 class _MembersCard extends StatelessWidget {
-  const _MembersCard({required this.service, required this.companyId});
+  const _MembersCard({
+    required this.service,
+    required this.companyId,
+    required this.onChangeRole,
+    required this.onEditPermissions,
+    required this.onRemove,
+  });
 
   final CompanyAccessService service;
   final String companyId;
+  final Future<void> Function(CompanyMember member) onChangeRole;
+  final Future<void> Function(CompanyMember member) onEditPermissions;
+  final Future<void> Function(CompanyMember member) onRemove;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: StreamBuilder<List<CompanyMember>>(
+          stream: service.watchMembers(companyId: companyId),
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final members = snap.data!;
+            if (members.isEmpty) {
+              return const Text('Todavía no hay miembros en la empresa.');
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.badge_outlined, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Text('Miembros actuales', style: AppTextStyles.title),
-              ],
-            ),
-            const SizedBox(height: 12),
-            StreamBuilder<List<CompanyMember>>(
-              stream: service.watchMembers(companyId: companyId),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                final members = snap.data ?? const <CompanyMember>[];
-                if (members.isEmpty) {
-                  return const Text('Todavía no hay empleados agregados.');
-                }
-
-                return Column(
-                  children: [
-                    for (final member in members)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          child: Text(
-                            member.name.isNotEmpty
-                                ? member.name[0].toUpperCase()
-                                : '?',
+                Text('Miembros del equipo', style: AppTextStyles.title),
+                const SizedBox(height: 12),
+                ...members.map(
+                  (m) => Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            m.name.isEmpty ? 'Sin nombre' : m.name,
+                            style: AppTextStyles.title,
                           ),
-                        ),
-                        title: Text(
-                          member.name.isEmpty ? 'Sin nombre' : member.name,
-                        ),
-                        subtitle: Text(
-                          member.email.isEmpty
-                              ? companyRoleLabel(member.role)
-                              : '${member.email} · ${companyRoleLabel(member.role)}',
-                        ),
+                          const SizedBox(height: 4),
+                          Text(
+                            m.email.isEmpty ? 'Sin correo' : m.email,
+                            style: AppTextStyles.body,
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(label: Text(companyRoleLabel(m.role))),
+                              if (m.isAnonymous)
+                                const Chip(label: Text('Temporal')),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Cotizaciones: ${moduleAccessLabel(m.permissions.quotes)}',
+                          ),
+                          Text(
+                            'OT: ${moduleAccessLabel(m.permissions.workOrders)}',
+                          ),
+                          Text(
+                            'Inventario: ${moduleAccessLabel(m.permissions.inventory)}',
+                          ),
+                          Text(
+                            'Ventas: ${moduleAccessLabel(m.permissions.sales)}',
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () => onChangeRole(m),
+                                icon: const Icon(
+                                  Icons.manage_accounts_outlined,
+                                ),
+                                label: const Text('Cambiar rol'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => onEditPermissions(m),
+                                icon: const Icon(Icons.tune_outlined),
+                                label: const Text('Permisos'),
+                              ),
+                              FilledButton.tonalIcon(
+                                onPressed: () => onRemove(m),
+                                icon: const Icon(Icons.person_remove_outlined),
+                                label: const Text('Eliminar'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -513,27 +716,20 @@ class _JoinCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.login_rounded, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Text('Unirme a una empresa', style: AppTextStyles.title),
-              ],
-            ),
+            Text('Unirme con QR o código', style: AppTextStyles.title),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              maxLines: 2,
+              maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Código o texto del QR',
-                hintText: 'Ej: A1B2C3D4E5F6',
+                prefixIcon: Icon(Icons.qr_code_2_rounded),
               ),
             ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              alignment: WrapAlignment.end,
               children: [
                 OutlinedButton.icon(
                   onPressed: busy ? null : onPaste,
@@ -543,19 +739,14 @@ class _JoinCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: busy ? null : onScan,
                   icon: const Icon(Icons.qr_code_scanner_rounded),
-                  label: const Text('Escanear QR'),
+                  label: const Text('Escanear'),
                 ),
                 FilledButton.icon(
                   onPressed: busy ? null : onJoin,
-                  icon: const Icon(Icons.group_add_outlined),
+                  icon: const Icon(Icons.check_circle_outline_rounded),
                   label: Text(busy ? 'Uniendo...' : 'Unirme'),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'También puedes abrir la cámara y leer el QR directamente.',
-              style: AppTextStyles.label,
             ),
           ],
         ),
