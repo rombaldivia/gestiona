@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/module_permission_guard.dart';
+import '../../company/presentation/member_permissions_helpers.dart';
+import '../../company/presentation/member_permissions_providers.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/sale.dart';
@@ -22,6 +24,9 @@ class SalesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncState = ref.watch(salesControllerProvider);
+    final member = ref.watch(currentMemberProvider).asData?.value;
+    final canEdit =
+        member == null || canEditModule(member.permissions, 'sales');
 
     return asyncState.when(
       loading: () => ModulePermissionGuard(
@@ -52,16 +57,18 @@ class SalesPage extends ConsumerWidget {
               actions: [
                 IconButton(
                   tooltip: 'Nueva venta',
-                  onPressed: () => _newSale(context, ref),
+                  onPressed: canEdit ? () => _newSale(context, ref) : null,
                   icon: const Icon(Icons.add_shopping_cart_rounded),
                 ),
               ],
             ),
-            floatingActionButton: FloatingActionButton.extended(
-              onPressed: () => _newSale(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Nueva venta'),
-            ),
+            floatingActionButton: canEdit
+                ? FloatingActionButton.extended(
+                    onPressed: () => _newSale(context, ref),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nueva venta'),
+                  )
+                : null,
             body: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               children: [
@@ -121,7 +128,9 @@ class SalesPage extends ConsumerWidget {
                         ),
                         const SizedBox(height: 14),
                         FilledButton.icon(
-                          onPressed: () => _newSale(context, ref),
+                          onPressed: canEdit
+                              ? () => _newSale(context, ref)
+                              : null,
                           icon: const Icon(Icons.add),
                           label: const Text('Nueva venta'),
                         ),
@@ -132,7 +141,7 @@ class SalesPage extends ConsumerWidget {
                   ...sales.map(
                     (sale) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _SaleCard(sale: sale),
+                      child: _SaleCard(sale: sale, canEdit: canEdit),
                     ),
                   ),
               ],
@@ -145,9 +154,10 @@ class SalesPage extends ConsumerWidget {
 }
 
 class _SaleCard extends ConsumerWidget {
-  const _SaleCard({required this.sale});
+  const _SaleCard({required this.sale, required this.canEdit});
 
   final Sale sale;
+  final bool canEdit;
 
   String _fmt(double v) => v.toStringAsFixed(2);
 
@@ -155,11 +165,13 @@ class _SaleCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => SaleEditorPage(sale: sale)));
-      },
+      onTap: canEdit
+          ? () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SaleEditorPage(sale: sale)),
+              );
+            }
+          : null,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

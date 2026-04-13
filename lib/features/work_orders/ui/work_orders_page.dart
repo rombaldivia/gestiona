@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/module_permission_guard.dart';
+import '../../../features/company/presentation/member_permissions_helpers.dart';
+import '../../../features/company/presentation/member_permissions_providers.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/work_order.dart';
@@ -18,24 +20,30 @@ class WorkOrdersPage extends ConsumerWidget {
     final async = ref.watch(workOrdersControllerProvider);
     final ctrl = ref.read(workOrdersControllerProvider.notifier);
 
+    final member = ref.watch(currentMemberProvider).asData?.value;
+    final canEdit =
+        member == null || canEditModule(member.permissions, 'workOrders');
+
     return ModulePermissionGuard(
       moduleKey: 'workOrders',
       moduleLabel: 'Órdenes de trabajo',
       child: Scaffold(
         appBar: AppBar(title: const Text('Órdenes de trabajo')),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => WorkOrderEditorPage(order: ctrl.newOrder()),
-            ),
-          ),
-          icon: const Icon(Icons.add),
-          label: const Text('Nueva OT'),
-        ),
+        floatingActionButton: canEdit
+            ? FloatingActionButton.extended(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => WorkOrderEditorPage(order: ctrl.newOrder()),
+                  ),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Nueva OT'),
+              )
+            : null,
         body: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
-          data: (state) => _Body(state: state, ctrl: ctrl),
+          data: (state) => _Body(state: state, ctrl: ctrl, canEdit: canEdit),
         ),
       ),
     );
@@ -43,9 +51,10 @@ class WorkOrdersPage extends ConsumerWidget {
 }
 
 class _Body extends ConsumerWidget {
-  const _Body({required this.state, required this.ctrl});
+  const _Body({required this.state, required this.ctrl, required this.canEdit});
   final WorkOrdersState state;
   final WorkOrdersController ctrl;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -114,8 +123,11 @@ class _Body extends ConsumerWidget {
                   itemCount: orders.length,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 10),
-                  itemBuilder: (_, i) =>
-                      _OrderCard(order: orders[i], ctrl: ctrl),
+                  itemBuilder: (_, i) => _OrderCard(
+                    order: orders[i],
+                    ctrl: ctrl,
+                    canEdit: canEdit,
+                  ),
                 ),
         ),
       ],
@@ -161,10 +173,15 @@ class _Chip extends StatelessWidget {
 }
 
 class _OrderCard extends ConsumerWidget {
-  const _OrderCard({required this.order, required this.ctrl});
+  const _OrderCard({
+    required this.order,
+    required this.ctrl,
+    required this.canEdit,
+  });
 
   final WorkOrder order;
   final WorkOrdersController ctrl;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -175,9 +192,13 @@ class _OrderCard extends ConsumerWidget {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => WorkOrderEditorPage(order: order)),
-        ),
+        onTap: canEdit
+            ? () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => WorkOrderEditorPage(order: order),
+                ),
+              )
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -326,13 +347,15 @@ class _OrderCard extends ConsumerWidget {
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              onPressed: () async {
-                                await _showRescheduleDialog(
-                                  context,
-                                  ctrl,
-                                  order,
-                                );
-                              },
+                              onPressed: canEdit
+                                  ? () async {
+                                      await _showRescheduleDialog(
+                                        context,
+                                        ctrl,
+                                        order,
+                                      );
+                                    }
+                                  : null,
                               child: const Text(
                                 'Reprogramar',
                                 style: TextStyle(
@@ -395,22 +418,27 @@ class _OrderCard extends ConsumerWidget {
                             ],
                           ),
                         );
-                        if (ok == true) await ctrl.delete(order.id);
+                        if (ok == true) {
+                          await ctrl.delete(order.id);
+                        }
                       }
                     },
                     itemBuilder: (_) => [
-                      if (order.deliveryAtMs != null)
+                      if (canEdit && order.deliveryAtMs != null)
                         const PopupMenuItem(
                           value: 'reschedule',
                           child: Text('Reprogramar entrega'),
                         ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Eliminar',
-                          style: TextStyle(color: Colors.redAccent),
+                      if (canEdit && order.deliveryAtMs != null)
+                        const PopupMenuDivider(),
+                      if (canEdit)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Eliminar',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ],

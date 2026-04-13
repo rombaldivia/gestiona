@@ -32,14 +32,15 @@ class _ModulePermissionGuardState extends ConsumerState<ModulePermissionGuard> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
 
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      final nav = Navigator.of(context, rootNavigator: false);
+      if (nav.canPop()) {
+        nav.pop();
       } else {
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        nav.pushNamedAndRemoveUntil('/', (route) => false);
       }
     });
   }
@@ -56,8 +57,6 @@ class _ModulePermissionGuardState extends ConsumerState<ModulePermissionGuard> {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
       data: (member) {
-        // Owner no necesariamente tiene doc en members; si member es null,
-        // no bloqueamos aquí. Las rules mandan.
         if (member == null) {
           return widget.child;
         }
@@ -67,7 +66,7 @@ class _ModulePermissionGuardState extends ConsumerState<ModulePermissionGuard> {
 
         if (!canView) {
           _kickOut(
-            'No tienes permisos para entrar a ${widget.moduleLabel ?? widget.moduleKey}.',
+            'No tienes permiso para ver ${widget.moduleLabel ?? widget.moduleKey}.',
           );
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -76,7 +75,7 @@ class _ModulePermissionGuardState extends ConsumerState<ModulePermissionGuard> {
 
         if (widget.requireEdit && !canEdit) {
           _kickOut(
-            'No tienes permisos de edición en ${widget.moduleLabel ?? widget.moduleKey}.',
+            'No tienes permiso de edición en ${widget.moduleLabel ?? widget.moduleKey}.',
           );
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),

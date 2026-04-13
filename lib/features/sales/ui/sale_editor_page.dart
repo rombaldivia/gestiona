@@ -15,6 +15,7 @@ import '../../subscription/presentation/entitlements_providers.dart';
 import '../domain/sale.dart';
 import '../domain/sale_document_type.dart';
 import '../domain/sale_status.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 import '../presentation/sales_controller.dart';
 
 class SaleEditorPage extends ConsumerStatefulWidget {
@@ -508,9 +509,13 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
   Widget build(BuildContext context) {
     final total = _lines.fold<double>(0, (sum, line) => sum + line.lineTotalBob);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.sale.numberLabel),
+    return ModulePermissionGuard(
+      moduleKey: 'sales',
+      moduleLabel: 'Ventas',
+      requireEdit: true,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.sale.numberLabel),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -703,6 +708,7 @@ class _SaleEditorPageState extends ConsumerState<SaleEditorPage> {
               : const Icon(Icons.save_outlined),
           label: Text(_saving ? 'Guardando...' : 'Guardar venta'),
         ),
+      ),
       ),
     );
   }

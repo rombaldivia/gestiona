@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/module_permission_guard.dart';
+import '../../../features/company/presentation/member_permissions_helpers.dart';
+import '../../../features/company/presentation/member_permissions_providers.dart';
 
 import '../domain/quote.dart';
 import '../domain/quote_status.dart';
@@ -15,25 +17,30 @@ class QuotesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(quotesControllerProvider);
     final ctrl = ref.read(quotesControllerProvider.notifier);
+    final member = ref.watch(currentMemberProvider).asData?.value;
+    final canEdit =
+        member == null || canEditModule(member.permissions, 'quotes');
 
     return ModulePermissionGuard(
       moduleKey: 'quotes',
       moduleLabel: 'Cotizaciones',
       child: Scaffold(
         appBar: AppBar(title: const Text('Cotizaciones')),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () async {
-            final q = await ctrl.newDraft(); // ✅ newDraft() es Future<Quote>
-            if (!context.mounted) return;
-            _openEditor(context, q);
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('Nueva'),
-        ),
+        floatingActionButton: canEdit
+            ? FloatingActionButton.extended(
+                onPressed: () async {
+                  final q = await ctrl.newDraft();
+                  if (!context.mounted) return;
+                  _openEditor(context, q);
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Nueva'),
+              )
+            : null,
         body: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
-          data: (state) => _Body(state: state, ctrl: ctrl),
+          data: (state) => _Body(state: state, ctrl: ctrl, canEdit: canEdit),
         ),
       ),
     );
@@ -48,9 +55,10 @@ class QuotesPage extends ConsumerWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 class _Body extends ConsumerWidget {
-  const _Body({required this.state, required this.ctrl});
+  const _Body({required this.state, required this.ctrl, required this.canEdit});
   final QuotesState state;
   final QuotesController ctrl;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -126,8 +134,11 @@ class _Body extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   itemCount: quotes.length,
                   separatorBuilder: (_, i) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) =>
-                      _QuoteCard(quote: quotes[i], ctrl: ctrl),
+                  itemBuilder: (_, i) => _QuoteCard(
+                    quote: quotes[i],
+                    ctrl: ctrl,
+                    canEdit: canEdit,
+                  ),
                 ),
         ),
       ],
@@ -186,9 +197,14 @@ class _FilterChip extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 class _QuoteCard extends ConsumerWidget {
-  const _QuoteCard({required this.quote, required this.ctrl});
+  const _QuoteCard({
+    required this.quote,
+    required this.ctrl,
+    required this.canEdit,
+  });
   final Quote quote;
   final QuotesController ctrl;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -201,9 +217,13 @@ class _QuoteCard extends ConsumerWidget {
       elevation: 0,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => QuoteEditorPage(quote: quote)),
-        ),
+        onTap: canEdit
+            ? () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => QuoteEditorPage(quote: quote),
+                ),
+              )
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -293,7 +313,9 @@ class _QuoteCard extends ConsumerWidget {
                             ],
                           ),
                         );
-                        if (ok == true) await ctrl.delete(quote.id);
+                        if (ok == true) {
+                          await ctrl.delete(quote.id);
+                        }
                       }
                       if (v == 'duplicate') {
                         final dup = await ctrl.duplicate(
@@ -308,19 +330,21 @@ class _QuoteCard extends ConsumerWidget {
                         );
                       }
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'duplicate',
-                        child: Text('Duplicar'),
-                      ),
-                      PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Eliminar',
-                          style: TextStyle(color: Colors.redAccent),
+                    itemBuilder: (_) => [
+                      if (canEdit)
+                        const PopupMenuItem(
+                          value: 'duplicate',
+                          child: Text('Duplicar'),
                         ),
-                      ),
+                      if (canEdit) const PopupMenuDivider(),
+                      if (canEdit)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Eliminar',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
                     ],
                   ),
                 ],

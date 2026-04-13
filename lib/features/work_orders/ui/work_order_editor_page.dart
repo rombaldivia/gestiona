@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/module_permission_guard.dart';
 import '../domain/work_order.dart';
 import '../domain/work_order_status.dart';
 import '../presentation/work_orders_controller.dart';
@@ -88,12 +89,16 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (!didPop) await _save();
-      },
-      child: Scaffold(
+    return ModulePermissionGuard(
+      moduleKey: 'workOrders',
+      moduleLabel: 'Órdenes de trabajo',
+      requireEdit: true,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (!didPop) await _save();
+        },
+        child: Scaffold(
         appBar: AppBar(
           title: Text('OT #${widget.order.sequence}-${widget.order.year}'),
           actions: [
@@ -447,6 +452,7 @@ class _WorkOrderEditorPageState extends ConsumerState<WorkOrderEditorPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
